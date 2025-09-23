@@ -10,4 +10,3 @@ contract MockERC1155Mintable is ERC1155 {
         _mint(to, id, 1, ""); // treat each id as NFT-like (supply=1 for tests)
     }
 }
-

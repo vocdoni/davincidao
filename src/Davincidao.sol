@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -19,10 +18,13 @@ contract DavinciDaoCensus {
 
     // ========= Types & storage =========
 
-    enum TokenStandard { ERC721, ERC1155 }
+    enum TokenStandard {
+        ERC721,
+        ERC1155
+    }
 
     struct Collection {
-        address token;         // ERC-721 or ERC-1155 contract
+        address token; // ERC-721 or ERC-1155 contract
         TokenStandard standard; // Which interface to use for ownership checks
     }
 
@@ -38,7 +40,7 @@ contract DavinciDaoCensus {
     // --- census tree ---
     LeanIMTData private _census;
     mapping(address => uint88) public weightOf; // 11-byte weights
-    
+
     // --- reverse index: IMT index → address ---
     mapping(uint256 => address) public indexAccount; // index → account (0 if empty)
 
@@ -114,7 +116,9 @@ contract DavinciDaoCensus {
         for (uint256 i = 0; i < candidateIds.length; ++i) {
             uint256 id = candidateIds[i];
             if (_ownerDelegated[msg.sender][nftIndex][id] && _owns(nftIndex, msg.sender, id)) {
-                unchecked { ++count; }
+                unchecked {
+                    ++count;
+                }
             }
         }
         uint256[] memory out = new uint256[](count);
@@ -148,12 +152,7 @@ contract DavinciDaoCensus {
     /// @param nftIndex   Index into `collections`.
     /// @param ids        Token IDs to delegate.
     /// @param toProof    Merkle path for `to`'s existing leaf (empty if `to` has zero weight).
-    function delegate(
-        address to,
-        uint256 nftIndex,
-        uint256[] calldata ids,
-        uint256[] calldata toProof
-    ) external {
+    function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof) external {
         _checkIndex(nftIndex);
         if (to == address(0)) revert ZeroAddress();
 
@@ -167,7 +166,9 @@ contract DavinciDaoCensus {
 
             tokenDelegate[key] = to;
             _ownerDelegated[msg.sender][nftIndex][id] = true;
-            unchecked { ++added; }
+            unchecked {
+                ++added;
+            }
 
             emit Delegated(msg.sender, to, nftIndex, id);
         }
@@ -181,16 +182,12 @@ contract DavinciDaoCensus {
     /// @param nftIndex Index into `collections`.
     /// @param ids      Token IDs to revoke delegation for.
     /// @param proofs   Proofs for each *affected* delegate address (unique and batched).
-    function undelegate(
-        uint256 nftIndex,
-        uint256[] calldata ids,
-        ProofInput[] calldata proofs
-    ) external {
+    function undelegate(uint256 nftIndex, uint256[] calldata ids, ProofInput[] calldata proofs) external {
         _checkIndex(nftIndex);
 
         // Aggregate decrements per delegate.
         address[] memory delAddrs = new address[](ids.length);
-        uint256[] memory counts   = new uint256[](ids.length);
+        uint256[] memory counts = new uint256[](ids.length);
         uint256 unique;
 
         for (uint256 i = 0; i < ids.length; ++i) {
@@ -208,9 +205,13 @@ contract DavinciDaoCensus {
             if (j == type(uint256).max) {
                 delAddrs[unique] = del;
                 counts[unique] = 1;
-                unchecked { ++unique; }
+                unchecked {
+                    ++unique;
+                }
             } else {
-                unchecked { ++counts[j]; }
+                unchecked {
+                    ++counts[j];
+                }
             }
             emit Undelegated(msg.sender, del, nftIndex, id);
         }
@@ -242,7 +243,7 @@ contract DavinciDaoCensus {
         if (to == address(0)) revert ZeroAddress();
 
         // Process delegation changes and get aggregated data
-        (address[] memory fromAddrs, uint256[] memory fromCounts, uint256 unique, uint256 added) = 
+        (address[] memory fromAddrs, uint256[] memory fromCounts, uint256 unique, uint256 added) =
             _processDelegationUpdates(to, nftIndex, ids);
 
         // Apply weight decreases for old delegates
@@ -308,16 +309,10 @@ contract DavinciDaoCensus {
     // ========= Internal helpers =========
 
     /// @dev Process delegation updates and return aggregated data
-    function _processDelegationUpdates(
-        address to,
-        uint256 nftIndex,
-        uint256[] calldata ids
-    ) internal returns (
-        address[] memory fromAddrs,
-        uint256[] memory fromCounts,
-        uint256 unique,
-        uint256 added
-    ) {
+    function _processDelegationUpdates(address to, uint256 nftIndex, uint256[] calldata ids)
+        internal
+        returns (address[] memory fromAddrs, uint256[] memory fromCounts, uint256 unique, uint256 added)
+    {
         fromAddrs = new address[](ids.length);
         fromCounts = new uint256[](ids.length);
 
@@ -335,16 +330,22 @@ contract DavinciDaoCensus {
                 if (j == type(uint256).max) {
                     fromAddrs[unique] = prev;
                     fromCounts[unique] = 1;
-                    unchecked { ++unique; }
+                    unchecked {
+                        ++unique;
+                    }
                 } else {
-                    unchecked { ++fromCounts[j]; }
+                    unchecked {
+                        ++fromCounts[j];
+                    }
                 }
                 emit Undelegated(msg.sender, prev, nftIndex, id);
             }
 
             tokenDelegate[key] = to;
             _ownerDelegated[msg.sender][nftIndex][id] = true;
-            unchecked { ++added; }
+            unchecked {
+                ++added;
+            }
 
             emit Delegated(msg.sender, to, nftIndex, id);
         }

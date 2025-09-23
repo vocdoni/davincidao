@@ -13,4 +13,3 @@ contract MockERC721Mintable is ERC721 {
         _safeMint(to, id);
     }
 }
-
