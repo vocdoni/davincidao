@@ -31,18 +31,6 @@ struct ProofInput {
 
 ## Usage Guide
 
-### Deployment
-
-Deploy the contract with your NFT collections:
-
-```solidity
-address[] memory tokens = [nftContract1, nftContract2];
-TokenStandard[] memory standards = [TokenStandard.ERC721, TokenStandard.ERC1155];
-DavinciDaoCensus census = new DavinciDaoCensus(tokens, standards);
-```
-
-### Basic Operations
-
 #### 1. Delegate Voting Power
 
 ```solidity
@@ -143,21 +131,85 @@ cd ../test-helper
 npm install
 ```
 
-### Testing
+### Build & Testing
 
 ```bash
-cd ../davincidao
+forge build
 forge test
 ```
 
-### Build and Deploy
+## Smart Contract Deployment
+
+#### 1. Configure Your NFT Collections
+
+Edit the deployment script at `script/DeployDavinciDao.s.sol` to include your specific NFT contract addresses:
+
+```solidity
+// Replace these example addresses with your actual NFT contracts
+address[] memory nftContracts = new address[](3);
+DavinciDaoCensus.TokenStandard[] memory standards = new DavinciDaoCensus.TokenStandard[](3);
+
+// Example: Popular NFT collections
+nftContracts[0] = 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D; // Bored Ape Yacht Club (ERC-721)
+standards[0] = DavinciDaoCensus.TokenStandard.ERC721;
+
+nftContracts[1] = 0x60E4d786628Fea6478F785A6d7e704777c86a7c6; // Mutant Ape Yacht Club (ERC-721)
+standards[1] = DavinciDaoCensus.TokenStandard.ERC721;
+
+nftContracts[2] = 0x495f947276749Ce646f68AC8c248420045cb7b5e; // OpenSea Shared Storefront (ERC-1155)
+standards[2] = DavinciDaoCensus.TokenStandard.ERC1155;
+```
+
+#### 2. Set Environment Variables
+
+Create a `.env` file in the project root:
 
 ```bash
-# Build the contracts
-forge build
+# .env file
+PRIVATE_KEY=0x1234567890abcdef... # Your deployer private key (without 0x prefix)
+RPC_URL=https://eth-mainnet.g.alchemy.com/v2/your-api-key # Your RPC endpoint
+ETHERSCAN_API_KEY=your-etherscan-api-key # For contract verification (optional)
+```
 
-# Deploy (example)
-forge script script/Deploy.s.sol --rpc-url <your_rpc_url> --private-key <your_private_key>
+#### 3. Deploy the Contract
+
+```bash
+# Load environment variables
+source .env
+
+# Deploy to mainnet
+forge script script/DeployDavinciDao.s.sol \
+    --rpc-url $RPC_URL \
+    --private-key $PRIVATE_KEY \
+    --broadcast \
+    --verify
+```
+
+#### 4. Alternative: Deploy with Specific Collections
+
+You can also deploy directly with custom parameters using `forge create`:
+
+```bash
+# Deploy with specific NFT addresses
+forge create src/Davincidao.sol:DavinciDaoCensus \
+    --rpc-url $RPC_URL \
+    --private-key $PRIVATE_KEY \
+    --constructor-args \
+    "[0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D,0x60E4d786628Fea6478F785A6d7e704777c86a7c6]" \
+    "[0,0]" \
+    --verify
+```
+
+### Post-Deployment Verification
+
+After deployment, verify your contract is working correctly:
+
+```bash
+# Check the deployed contract
+cast call <DEPLOYED_CONTRACT_ADDRESS> "getCensusRoot()" --rpc-url $RPC_URL
+
+# Check configured collections
+cast call <DEPLOYED_CONTRACT_ADDRESS> "collections(uint256)" 0 --rpc-url $RPC_URL
 ```
 
 ## API Reference
@@ -203,4 +255,3 @@ for (let i = 0; i < treeSize; i++) {
     }
 }
 ```
-
