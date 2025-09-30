@@ -28,6 +28,8 @@ export const useWallet = (): WalletState & {
   disconnect: () => void
   connectWithPrivateKey: (privateKey: string) => Promise<void>
   privateKeyWallet: Wallet | null
+  isWrongNetwork: boolean
+  switchNetwork: () => Promise<void>
 } => {
   // Fallback state for when AppKit is not available
   const [fallbackState, setFallbackState] = useState({
@@ -246,6 +248,68 @@ export const useWallet = (): WalletState & {
     }
   }, [privateKeyWallet, appKitAccount.isConnected, appKitAccount.address, appKitNetwork.chainId, fallbackState])
 
+  // Check if connected to wrong network
+  const isWrongNetwork = useMemo(() => {
+    if (!finalState.isConnected || !finalState.chainId) {
+      return false
+    }
+    return finalState.chainId !== CONTRACT_CONFIG.chainId
+  }, [finalState.isConnected, finalState.chainId])
+
+  // Switch to the correct network (for injected wallets that support EIP-3326)
+  const switchNetwork = async () => {
+    if (!finalState.isConnected) {
+      throw new Error('Wallet not connected')
+    }
+
+    // Private key wallets are always on the correct network
+    if (privateKeyWallet) {
+      return
+    }
+
+    // For injected wallets, try to switch network
+    if (typeof window !== 'undefined' && window.ethereum) {
+      try {
+        const chainIdHex = `0x${CONTRACT_CONFIG.chainId.toString(16)}`
+        
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: chainIdHex }],
+        })
+      } catch (error: any) {
+        // This error code indicates that the chain has not been added to MetaMask
+        if (error.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: `0x${CONTRACT_CONFIG.chainId.toString(16)}`,
+                  chainName: CONTRACT_CONFIG.chainId === 11155111 ? 'Sepolia Testnet' : `Chain ${CONTRACT_CONFIG.chainId}`,
+                  nativeCurrency: {
+                    name: 'ETH',
+                    symbol: 'ETH',
+                    decimals: 18,
+                  },
+                  rpcUrls: [CONTRACT_CONFIG.rpcUrl],
+                  blockExplorerUrls: [CONTRACT_CONFIG.blockExplorerUrl],
+                },
+              ],
+            })
+          } catch (addError) {
+            console.error('Error adding network:', addError)
+            throw new Error('Failed to add network to wallet')
+          }
+        } else {
+          console.error('Error switching network:', error)
+          throw new Error('Failed to switch network')
+        }
+      }
+    } else {
+      throw new Error('No injected wallet found')
+    }
+  }
+
   return {
     isConnected: finalState.isConnected,
     address: finalState.address,
@@ -255,5 +319,7 @@ export const useWallet = (): WalletState & {
     disconnect,
     connectWithPrivateKey,
     privateKeyWallet: privateKeyWallet?.wallet || null,
+    isWrongNetwork,
+    switchNetwork,
   }
 }

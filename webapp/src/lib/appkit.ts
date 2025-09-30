@@ -1,7 +1,7 @@
 import { EthersAdapter } from '@reown/appkit-adapter-ethers'
-import { sepolia, mainnet, polygon } from '@reown/appkit/networks'
+import { sepolia, mainnet, polygon, base, arbitrum, optimism } from '@reown/appkit/networks'
 import { createAppKit } from '@reown/appkit/react'
-import { CONTRACT_CONFIG } from './constants'
+import { CONTRACT_CONFIG, SUPPORTED_NETWORKS } from './constants'
 
 // Get projectId from environment (optional)
 const projectId = import.meta.env.WALLETCONNECT_PROJECT_ID
@@ -21,23 +21,61 @@ if (projectId) {
   // Create Ethers Adapter
   const ethersAdapter = new EthersAdapter()
 
-  // Determine networks based on chain ID
-  const getNetworks = () => {
-    const networks = []
-    if (CONTRACT_CONFIG.chainId === 1) {
-      networks.push(mainnet, sepolia)
-    } else if (CONTRACT_CONFIG.chainId === 137) {
-      networks.push(polygon, sepolia)  
-    } else {
-      networks.push(sepolia) // Default to sepolia
-    }
-    return networks as [typeof mainnet, ...typeof networks]
+  // Map of known networks by chain ID
+  const knownNetworks: Record<number, any> = {
+    1: mainnet,
+    11155111: sepolia,
+    137: polygon,
+    8453: base,
+    42161: arbitrum,
+    10: optimism,
   }
 
-  // Create AppKit modal
+  // Get the configured network, creating a custom one if needed
+  const getConfiguredNetwork = () => {
+    const chainId = CONTRACT_CONFIG.chainId
+    
+    // If we have a known network definition, use it
+    if (knownNetworks[chainId]) {
+      return knownNetworks[chainId]
+    }
+    
+    // Otherwise, create a custom network definition
+    const networkInfo = SUPPORTED_NETWORKS[chainId as keyof typeof SUPPORTED_NETWORKS]
+    const networkName = networkInfo?.name || `Chain ${chainId}`
+    
+    return {
+      id: chainId,
+      name: networkName,
+      network: networkName.toLowerCase().replace(/\s+/g, '-'),
+      nativeCurrency: {
+        name: 'ETH',
+        symbol: 'ETH',
+        decimals: 18,
+      },
+      rpcUrls: {
+        default: {
+          http: [CONTRACT_CONFIG.rpcUrl],
+        },
+        public: {
+          http: [CONTRACT_CONFIG.rpcUrl],
+        },
+      },
+      blockExplorers: {
+        default: {
+          name: 'Explorer',
+          url: CONTRACT_CONFIG.blockExplorerUrl,
+        },
+      },
+    }
+  }
+
+  // Create AppKit modal with ONLY the configured network
+  // This forces users to connect to the correct network
   appKit = createAppKit({
     adapters: [ethersAdapter],
-    networks: getNetworks(),
+    networks: [getConfiguredNetwork()],
+    defaultNetwork: getConfiguredNetwork(),
     projectId,
     metadata,
     features: {

@@ -226,7 +226,9 @@ uint256[][] memory tokenIds = [
 
 ### 1. Connect Wallet
 - Click "Connect Wallet" to connect your Web3 wallet
-- Ensure you're on the correct network (Sepolia testnet by default)
+- The app will automatically enforce the network configured in your `.env` file
+- If you're on the wrong network, you'll see a warning banner with a "Switch Network" button
+- For WalletConnect users, only the configured network will be available for connection
 
 ### 2. View Collections
 The sidebar displays all configured collections with:
@@ -262,12 +264,60 @@ The sidebar displays all configured collections with:
 - **Smart Grouping**: Groups NFTs by collection and delegation status
 - **Batch Operations**: Allows efficient management of multiple NFTs
 
+## Network Configuration
+
+### Automatic Network Enforcement
+The webapp automatically enforces the network configured in your environment variables:
+
+1. **WalletConnect (AppKit)**: Only the configured network is available in the connection modal
+2. **Injected Wallets (MetaMask, etc.)**: Automatic network switching with user confirmation
+3. **Private Key Connections**: Always use the configured network's RPC endpoint
+
+### Network Switching
+When connected to the wrong network:
+- A yellow warning banner appears at the top of the page
+- Click "Switch Network" to automatically switch (for compatible wallets)
+- If automatic switching fails, manually switch in your wallet
+
+### Supported Networks
+The app dynamically supports any EVM-compatible network by configuring:
+```env
+VITE_CHAIN_ID=11155111        # Network chain ID
+VITE_RPC_URL=https://...      # RPC endpoint
+VITE_BLOCK_EXPLORER_URL=...   # Block explorer URL
+```
+
+Common networks are pre-configured:
+- Ethereum Mainnet (1)
+- Sepolia Testnet (11155111)
+- Polygon (137)
+- Base (8453)
+- Arbitrum (42161)
+- Optimism (10)
+
+For custom networks, the app will create a network definition automatically using your ENV configuration.
+
 ## Troubleshooting
+
+### Network Issues
+
+#### Wrong Network Warning
+If you see "You're connected to the wrong network":
+1. **Click "Switch Network"**: The app will attempt to switch automatically
+2. **Manual Switch**: If automatic switching fails, switch manually in your wallet
+3. **Check Configuration**: Verify `VITE_CHAIN_ID` matches your intended network
+4. **WalletConnect Users**: Disconnect and reconnect - only the correct network will be available
+
+#### Network Not Added to Wallet
+If your wallet doesn't have the configured network:
+1. The app will attempt to add it automatically when you click "Switch Network"
+2. Approve the "Add Network" request in your wallet
+3. The network will be added with the RPC URL and block explorer from your ENV configuration
 
 ### Contract Not Found Error
 If you see "No contract deployed at address [ADDRESS]":
 1. **Verify Deployment**: Check that the contract is actually deployed at the specified address using a block explorer
-2. **Network Mismatch**: Ensure you're connected to the correct network (the webapp shows the current chain ID)
+2. **Network Mismatch**: Ensure you're connected to the correct network (check the warning banner)
 3. **RPC Issues**: Verify the RPC URL is working correctly in your `.env` file
 4. **Contract Address**: Double-check the contract address format (must be a valid 42-character hex string starting with 0x)
 
