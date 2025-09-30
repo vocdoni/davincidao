@@ -21,12 +21,10 @@ contract DavinciDaoComprehensiveTest is Test {
 
         // Setup collections array
         address[] memory tokens = new address[](1);
-        DavinciDaoCensus.TokenStandard[] memory standards = new DavinciDaoCensus.TokenStandard[](1);
         tokens[0] = address(nft);
-        standards[0] = DavinciDaoCensus.TokenStandard.ERC721;
 
         // Deploy census contract
-        census = new DavinciDaoCensus(tokens, standards);
+        census = new DavinciDaoCensus(tokens);
 
         // Mint NFTs to alice for delegation
         nft.mint(alice); // tokenId 1
@@ -383,20 +381,9 @@ contract DavinciDaoComprehensiveTest is Test {
     function testConstructorEdgeCases() public {
         // Test empty arrays (should fail)
         address[] memory emptyTokens = new address[](0);
-        DavinciDaoCensus.TokenStandard[] memory emptyStandards = new DavinciDaoCensus.TokenStandard[](0);
 
         vm.expectRevert("bad config");
-        new DavinciDaoCensus(emptyTokens, emptyStandards);
-
-        // Test mismatched array lengths (should fail)
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(nft);
-        DavinciDaoCensus.TokenStandard[] memory standards = new DavinciDaoCensus.TokenStandard[](2);
-        standards[0] = DavinciDaoCensus.TokenStandard.ERC721;
-        standards[1] = DavinciDaoCensus.TokenStandard.ERC721;
-
-        vm.expectRevert("bad config");
-        new DavinciDaoCensus(tokens, standards);
+        new DavinciDaoCensus(emptyTokens);
     }
 
     /// @notice Test invalid collection index
@@ -493,10 +480,9 @@ contract DavinciDaoComprehensiveTest is Test {
 
     /// @notice Test collections array access
     function testCollectionsAccess() public {
-        // Test accessing collections array
-        (address token, DavinciDaoCensus.TokenStandard standard) = census.collections(0);
+        // Test accessing collections array - for a struct with one field, getter returns just the field
+        address token = census.collections(0);
         assertEq(token, address(nft));
-        assertEq(uint256(standard), uint256(DavinciDaoCensus.TokenStandard.ERC721));
     }
 
     /// @notice Test weightOf mapping access

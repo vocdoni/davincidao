@@ -160,6 +160,13 @@ nftContracts[2] = 0x495f947276749Ce646f68AC8c248420045cb7b5e; // OpenSea Shared 
 standards[2] = DavinciDaoCensus.TokenStandard.ERC1155;
 ```
 
+**Note**: The deployment script includes the necessary imports:
+```solidity
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {DavinciDaoCensus} from "../src/Davincidao.sol";
+```
+
 #### 2. Set Environment Variables
 
 Create a `.env` file in the project root:

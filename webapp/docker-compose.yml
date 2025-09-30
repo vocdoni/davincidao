@@ -1,0 +1,31 @@
+services:
+  webapp:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_CONTRACT_ADDRESS=${VITE_CONTRACT_ADDRESS}
+        - VITE_RPC_URL=${VITE_RPC_URL}
+        - VITE_CHAIN_ID=${VITE_CHAIN_ID}
+        - VITE_ALCHEMY_API_KEY=${VITE_ALCHEMY_API_KEY}
+        - VITE_BLOCK_EXPLORER_URL=${VITE_BLOCK_EXPLORER_URL}
+        - VITE_MINTING_PAGE_URL=${VITE_MINTING_PAGE_URL}
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.davincidao.rule=Host(`localhost`)"
+      - "traefik.http.services.davincidao.loadbalancer.server.port=80"
+
+#networks:
+#  default:
+#    name: davincidao-network

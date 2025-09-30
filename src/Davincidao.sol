@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 // OpenZeppelin v5.4.x interfaces
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-import {IERC1155} from "openzeppelin-contracts/contracts/token/ERC1155/IERC1155.sol";
 
 // Lean-IMT (zk-kit)
 import {InternalLeanIMT, LeanIMTData} from "zk-kit.solidity/packages/lean-imt/contracts/InternalLeanIMT.sol";
@@ -11,21 +10,15 @@ import {SNARK_SCALAR_FIELD} from "zk-kit.solidity/packages/lean-imt/contracts/Co
 
 /// @title DavinciDaoCensus
 /// @notice Maintains a Merkle-root ("censusRoot") over (address||weight) leaves where
-///         weight accumulates delegated NFTs across ERC-721 and/or ERC-1155 collections.
+///         weight accumulates delegated NFTs across ERC-721 collections.
 /// @dev    Uses Lean-IMT. _insert requires no proof; _update/_remove require Merkle "siblings".
 contract DavinciDaoCensus {
     using InternalLeanIMT for LeanIMTData;
 
     // ========= Types & storage =========
 
-    enum TokenStandard {
-        ERC721,
-        ERC1155
-    }
-
     struct Collection {
-        address token; // ERC-721 or ERC-1155 contract
-        TokenStandard standard; // Which interface to use for ownership checks
+        address token; // ERC-721 contract
     }
 
     /// @notice Proof for a specific account's leaf (required by _update/_remove).
@@ -60,6 +53,7 @@ contract DavinciDaoCensus {
 
     // ========= Custom errors =========
     error InvalidCollection();
+    error InvalidTokenId(uint256 tokenId);
     error ZeroAddress();
     error NoNewDelegations();
     error NotTokenOwner(uint256 tokenId);
@@ -71,13 +65,13 @@ contract DavinciDaoCensus {
 
     // ========= Constructor =========
 
-    /// @param tokens     Array of token contract addresses (ERC-721 and/or ERC-1155).
-    /// @param standards  Parallel array indicating the standard of each token.
-    constructor(address[] memory tokens, TokenStandard[] memory standards) {
+    /// @param tokens Array of ERC-721 token contract addresses.
+    constructor(address[] memory tokens) {
         uint256 n = tokens.length;
-        require(n > 0 && n == standards.length, "bad config");
+        require(n > 0, "bad config");
         for (uint256 i = 0; i < n; ++i) {
-            collections.push(Collection({token: tokens[i], standard: standards[i]}));
+            collections.push();
+            collections[i].token = tokens[i];
         }
     }
 
@@ -108,7 +102,7 @@ contract DavinciDaoCensus {
     }
 
     /// @notice Returns token IDs that `msg.sender` has delegated for `nftIndex`
-    ///         and **still currently owns** (i.e., ERC-721 `ownerOf` or ERC-1155 `balanceOf > 0`).
+    ///         and **still currently owns** (i.e., ERC-721 `ownerOf`).
     function getNFTids(uint256 nftIndex, uint256[] calldata candidateIds) external view returns (uint256[] memory) {
         _checkIndex(nftIndex);
         // Filter the provided candidates (client can cache their list to avoid storage-heavy on-chain sets).
@@ -144,6 +138,7 @@ contract DavinciDaoCensus {
         return indexAccount[index];
     }
 
+
     // ========= Mutating API =========
     // As with Lean-IMT: first insertion needs no proof; updates/removals need Merkle siblings. :contentReference[oaicite:3]{index=3}
 
@@ -159,6 +154,7 @@ contract DavinciDaoCensus {
         uint256 added;
         for (uint256 i = 0; i < ids.length; ++i) {
             uint256 id = ids[i];
+            if (!_isValidTokenId(nftIndex, id)) revert InvalidTokenId(id);
             if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
 
             bytes32 key = _tokenKey(nftIndex, id);
@@ -318,6 +314,7 @@ contract DavinciDaoCensus {
 
         for (uint256 i = 0; i < ids.length; ++i) {
             uint256 id = ids[i];
+            if (!_isValidTokenId(nftIndex, id)) revert InvalidTokenId(id);
             if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
 
             bytes32 key = _tokenKey(nftIndex, id);
@@ -370,6 +367,13 @@ contract DavinciDaoCensus {
         if (nftIndex >= collections.length) revert InvalidCollection();
     }
 
+    /// @dev Validates that a token ID is valid for the given collection.
+    ///      For ERC721: always returns true (any token ID can be delegated if owned).
+    function _isValidTokenId(uint256, /* nftIndex */ uint256 /* tokenId */ ) internal pure returns (bool) {
+        // For ERC721, any token ID is valid if it exists (ownership check handles existence)
+        return true;
+    }
+
     function _tokenKey(uint256 nftIndex, uint256 tokenId) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(nftIndex, tokenId));
     }
@@ -379,14 +383,10 @@ contract DavinciDaoCensus {
         return (uint256(uint160(account)) << 88) | uint256(weight);
     }
 
-    /// @dev Ownership check for either ERC721 or ERC1155 (NFT semantics).
+    /// @dev Ownership check for ERC721 (NFT semantics).
     function _owns(uint256 nftIndex, address owner, uint256 tokenId) internal view returns (bool) {
         Collection memory c = collections[nftIndex];
-        if (c.standard == TokenStandard.ERC721) {
-            return IERC721(c.token).ownerOf(tokenId) == owner; // reverts if tokenId doesn't exist
-        } else {
-            return IERC1155(c.token).balanceOf(owner, tokenId) > 0;
-        }
+        return IERC721(c.token).ownerOf(tokenId) == owner; // reverts if tokenId doesn't exist
     }
 
     /// @dev Linear search utilities for small batches (keeps storage light).
