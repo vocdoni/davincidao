@@ -112,8 +112,8 @@ export class AlchemyService {
 
       if (collectionIndex === -1) continue // Skip if not in our collections
 
-      // Convert hex token ID to decimal string
-      const tokenId = parseInt(nft.tokenId, 16).toString()
+      // Token ID is already in decimal format from Alchemy SDK
+      const tokenId = nft.tokenId
 
       nfts.push({
         collectionIndex,
