@@ -138,7 +138,6 @@ contract DavinciDaoCensus {
         return indexAccount[index];
     }
 
-
     // ========= Mutating API =========
     // As with Lean-IMT: first insertion needs no proof; updates/removals need Merkle siblings. :contentReference[oaicite:3]{index=3}
 
@@ -147,29 +146,27 @@ contract DavinciDaoCensus {
     /// @param nftIndex   Index into `collections`.
     /// @param ids        Token IDs to delegate.
     /// @param toProof    Merkle path for `to`'s existing leaf (empty if `to` has zero weight).
-    function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof) external {
+    /// @param fromProofs Proofs for clearing inherited delegations (if any tokens were previously delegated by another owner).
+    function delegate(
+        address to,
+        uint256 nftIndex,
+        uint256[] calldata ids,
+        uint256[] calldata toProof,
+        ProofInput[] calldata fromProofs
+    ) external {
         _checkIndex(nftIndex);
         if (to == address(0)) revert ZeroAddress();
 
-        uint256 added;
-        for (uint256 i = 0; i < ids.length; ++i) {
-            uint256 id = ids[i];
-            if (!_isValidTokenId(nftIndex, id)) revert InvalidTokenId(id);
-            if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
+        // Process delegations and get inherited delegation info
+        (address[] memory inheritedDelegates, uint256[] memory inheritedCounts, uint256 uniqueInherited, uint256 added)
+        = _processDelegations(to, nftIndex, ids);
 
-            bytes32 key = _tokenKey(nftIndex, id);
-            if (tokenDelegate[key] != address(0)) revert AlreadyDelegated(id);
-
-            tokenDelegate[key] = to;
-            _ownerDelegated[msg.sender][nftIndex][id] = true;
-            unchecked {
-                ++added;
-            }
-
-            emit Delegated(msg.sender, to, nftIndex, id);
-        }
         if (added == 0) revert NoNewDelegations();
 
+        // Clear inherited delegations first (decrease weights of previous delegates)
+        _applyInheritedProofs(inheritedDelegates, inheritedCounts, uniqueInherited, fromProofs);
+
+        // Apply weight increase for new delegate
         _applyDelta(to, int256(added), toProof);
         emit CensusRootUpdated(_census._root());
     }
@@ -287,7 +284,7 @@ contract DavinciDaoCensus {
             indexAccount[idx] = account; // set reverse index
         } else if (newW == 0) {
             // C) Removal (weight >0 → 0)
-            if (siblings.length == 0) revert ProofRequired(account);
+            // Note: For single-node tree, siblings can be empty
             uint256 idx = _census._indexOf(oldLeaf); // capture index before removal
             _census._remove(oldLeaf, siblings);
             indexAccount[idx] = address(0); // clear reverse index
@@ -402,5 +399,76 @@ contract DavinciDaoCensus {
             if (proofs[i].account == account) return i;
         }
         return type(uint256).max;
+    }
+
+    /// @dev Process delegations for the delegate function, handling inherited delegations
+    function _processDelegations(address to, uint256 nftIndex, uint256[] calldata ids)
+        internal
+        returns (
+            address[] memory inheritedDelegates,
+            uint256[] memory inheritedCounts,
+            uint256 uniqueInherited,
+            uint256 added
+        )
+    {
+        inheritedDelegates = new address[](ids.length);
+        inheritedCounts = new uint256[](ids.length);
+
+        for (uint256 i = 0; i < ids.length; ++i) {
+            uint256 id = ids[i];
+            if (!_isValidTokenId(nftIndex, id)) revert InvalidTokenId(id);
+            if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
+
+            bytes32 key = _tokenKey(nftIndex, id);
+            address existingDelegate = tokenDelegate[key];
+
+            // Check if this is an inherited delegation (token was delegated by previous owner)
+            if (existingDelegate != address(0)) {
+                // If the current owner previously delegated this token, it's a double delegation error
+                if (_ownerDelegated[msg.sender][nftIndex][id]) {
+                    revert AlreadyDelegated(id);
+                }
+
+                // This is an inherited delegation - track it for clearing
+                uint256 j = _indexOf(inheritedDelegates, uniqueInherited, existingDelegate);
+                if (j == type(uint256).max) {
+                    inheritedDelegates[uniqueInherited] = existingDelegate;
+                    inheritedCounts[uniqueInherited] = 1;
+                    unchecked {
+                        ++uniqueInherited;
+                    }
+                } else {
+                    unchecked {
+                        ++inheritedCounts[j];
+                    }
+                }
+
+                // Emit undelegation event for the inherited delegation
+                emit Undelegated(msg.sender, existingDelegate, nftIndex, id);
+            }
+
+            tokenDelegate[key] = to;
+            _ownerDelegated[msg.sender][nftIndex][id] = true;
+            unchecked {
+                ++added;
+            }
+
+            emit Delegated(msg.sender, to, nftIndex, id);
+        }
+    }
+
+    /// @dev Apply weight decreases for inherited delegations using proofs
+    function _applyInheritedProofs(
+        address[] memory inheritedDelegates,
+        uint256[] memory inheritedCounts,
+        uint256 uniqueInherited,
+        ProofInput[] calldata fromProofs
+    ) internal {
+        for (uint256 k = 0; k < uniqueInherited; ++k) {
+            address acct = inheritedDelegates[k];
+            uint256 pIdx = _indexOfProof(fromProofs, acct);
+            if (pIdx == type(uint256).max) revert ProofRequired(acct);
+            _applyDelta(acct, -int256(inheritedCounts[k]), fromProofs[pIdx].siblings);
+        }
     }
 }

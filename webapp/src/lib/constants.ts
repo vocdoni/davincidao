@@ -53,7 +53,7 @@ export const DAVINCI_DAO_ABI = [
   'function collections(uint256 index) external view returns (address token)',
   
   // Mutating functions (matching actual contract)
-  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof) external',
+  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof, tuple(address account, uint256[] siblings)[] calldata fromProofs) external',
   'function undelegate(uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint256[] siblings)[] calldata proofs) external',
   'function updateDelegation(address to, uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint256[] siblings)[] calldata fromProofs, uint256[] calldata toProof) external',
   

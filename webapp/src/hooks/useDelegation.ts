@@ -359,7 +359,8 @@ export const useDelegation = (
               operation.to,
               operation.collectionIndex,
               tokensToDelegate,
-              proof
+              proof,
+              [] // No inherited delegations for normal delegation flow
             )
             break
           }

@@ -43,7 +43,7 @@ contract DavinciDaoComprehensiveTest is Test {
         ids1[0] = 1;
         uint256[] memory emptyProof = new uint256[](0);
 
-        census.delegate(bob, 0, ids1, emptyProof);
+        census.delegate(bob, 0, ids1, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify Bob's state
         (uint88 bobWeight,) = census.getDelegations(bob);
@@ -55,7 +55,7 @@ contract DavinciDaoComprehensiveTest is Test {
         uint256[] memory ids2 = new uint256[](1);
         ids2[0] = 2;
 
-        census.delegate(charlie, 0, ids2, emptyProof);
+        census.delegate(charlie, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify Charlie's state
         (uint88 charlieWeight,) = census.getDelegations(charlie);
@@ -72,7 +72,7 @@ contract DavinciDaoComprehensiveTest is Test {
         uint256[] memory bobProof = new uint256[](1);
         bobProof[0] = 928455029464035206174343169; // Charlie's leaf as sibling
 
-        census.delegate(bob, 0, ids3, bobProof);
+        census.delegate(bob, 0, ids3, bobProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify Bob's updated state
         (bobWeight,) = census.getDelegations(bob);
@@ -94,7 +94,7 @@ contract DavinciDaoComprehensiveTest is Test {
         ids1[1] = 2;
         uint256[] memory emptyProof = new uint256[](0);
 
-        census.delegate(bob, 0, ids1, emptyProof);
+        census.delegate(bob, 0, ids1, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify initial state
         (uint88 bobWeight,) = census.getDelegations(bob);
@@ -106,7 +106,7 @@ contract DavinciDaoComprehensiveTest is Test {
         uint256[] memory ids2 = new uint256[](1);
         ids2[0] = 3;
 
-        census.delegate(charlie, 0, ids2, emptyProof);
+        census.delegate(charlie, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify state after Charlie's insertion
         (uint88 charlieWeight,) = census.getDelegations(charlie);
@@ -150,13 +150,13 @@ contract DavinciDaoComprehensiveTest is Test {
         ids1[0] = 1;
         uint256[] memory emptyProof = new uint256[](0);
 
-        census.delegate(bob, 0, ids1, emptyProof);
+        census.delegate(bob, 0, ids1, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Step 2: Insert Charlie with weight 1
         uint256[] memory ids2 = new uint256[](1);
         ids2[0] = 2;
 
-        census.delegate(charlie, 0, ids2, emptyProof);
+        census.delegate(charlie, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify initial state
         assertEq(census.getAccountAt(0), bob);
@@ -182,7 +182,7 @@ contract DavinciDaoComprehensiveTest is Test {
         uint256[] memory ids3 = new uint256[](1);
         ids3[0] = 3;
 
-        census.delegate(alice, 0, ids3, emptyProof);
+        census.delegate(alice, 0, ids3, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify Alice's insertion
         (uint88 aliceWeight,) = census.getDelegations(alice);
@@ -203,15 +203,15 @@ contract DavinciDaoComprehensiveTest is Test {
         // Insert multiple accounts
         uint256[] memory ids1 = new uint256[](1);
         ids1[0] = 1;
-        census.delegate(bob, 0, ids1, emptyProof);
+        census.delegate(bob, 0, ids1, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         uint256[] memory ids2 = new uint256[](1);
         ids2[0] = 2;
-        census.delegate(charlie, 0, ids2, emptyProof);
+        census.delegate(charlie, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         uint256[] memory ids3 = new uint256[](1);
         ids3[0] = 3;
-        census.delegate(dave, 0, ids3, emptyProof);
+        census.delegate(dave, 0, ids3, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Verify reverse index
         assertEq(census.getAccountAt(0), bob);
@@ -241,23 +241,23 @@ contract DavinciDaoComprehensiveTest is Test {
         uint256[] memory emptyProof = new uint256[](0);
 
         vm.expectRevert(DavinciDaoCensus.ZeroAddress.selector);
-        census.delegate(address(0), 0, ids, emptyProof);
+        census.delegate(address(0), 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Test delegation of non-owned token (should fail)
         vm.stopPrank();
         vm.startPrank(bob); // Bob doesn't own any tokens
 
         vm.expectRevert(abi.encodeWithSelector(DavinciDaoCensus.NotTokenOwner.selector, 1));
-        census.delegate(charlie, 0, ids, emptyProof);
+        census.delegate(charlie, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         vm.stopPrank();
         vm.startPrank(alice);
 
         // Test double delegation (should fail)
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         vm.expectRevert(abi.encodeWithSelector(DavinciDaoCensus.AlreadyDelegated.selector, 1));
-        census.delegate(charlie, 0, ids, emptyProof);
+        census.delegate(charlie, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         vm.stopPrank();
     }
@@ -275,7 +275,7 @@ contract DavinciDaoComprehensiveTest is Test {
         ids[0] = 1;
         uint256[] memory emptyProof = new uint256[](0);
 
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Test valid and invalid indices
         assertEq(census.getAccountAt(0), bob);
@@ -294,17 +294,17 @@ contract DavinciDaoComprehensiveTest is Test {
         // Delegate tokens 1 and 3 to bob, token 2 to charlie
         uint256[] memory ids1 = new uint256[](1);
         ids1[0] = 1;
-        census.delegate(bob, 0, ids1, emptyProof);
+        census.delegate(bob, 0, ids1, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         uint256[] memory ids2 = new uint256[](1);
         ids2[0] = 2;
-        census.delegate(charlie, 0, ids2, emptyProof);
+        census.delegate(charlie, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         uint256[] memory ids3 = new uint256[](1);
         ids3[0] = 3;
         uint256[] memory bobProof = new uint256[](1);
         bobProof[0] = 928455029464035206174343169; // Charlie's leaf as sibling
-        census.delegate(bob, 0, ids3, bobProof);
+        census.delegate(bob, 0, ids3, bobProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Test getTokenDelegations
         uint256[] memory queryIds = new uint256[](4);
@@ -335,7 +335,7 @@ contract DavinciDaoComprehensiveTest is Test {
         ids[0] = 1;
         ids[1] = 2;
         ids[2] = 3;
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Test getNFTids - should return tokens alice has delegated and still owns
         uint256[] memory candidateIds = new uint256[](5);
@@ -368,7 +368,7 @@ contract DavinciDaoComprehensiveTest is Test {
         // Delegate token to bob
         uint256[] memory ids = new uint256[](1);
         ids[0] = 1;
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Now bob should have weight 1
         uint256 leafAfter = census.computeLeaf(bob);
@@ -396,7 +396,7 @@ contract DavinciDaoComprehensiveTest is Test {
 
         // Test with invalid collection index (should fail)
         vm.expectRevert(DavinciDaoCensus.InvalidCollection.selector);
-        census.delegate(bob, 999, ids, emptyProof);
+        census.delegate(bob, 999, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         vm.expectRevert(DavinciDaoCensus.InvalidCollection.selector);
         census.getTokenDelegations(999, ids);
@@ -419,7 +419,7 @@ contract DavinciDaoComprehensiveTest is Test {
         vm.expectEmit(true, true, true, true);
         emit DavinciDaoCensus.Delegated(alice, bob, 0, 1);
 
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Events are also tested in other comprehensive tests with valid proofs
 
@@ -442,7 +442,7 @@ contract DavinciDaoComprehensiveTest is Test {
         census.undelegate(0, ids, proofs);
 
         // Delegate first
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
 
         // Test undelegating token you don't own
         vm.stopPrank();
@@ -497,7 +497,7 @@ contract DavinciDaoComprehensiveTest is Test {
         ids[0] = 1;
         uint256[] memory emptyProof = new uint256[](0);
 
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
         assertEq(census.weightOf(bob), 1);
 
         vm.stopPrank();
@@ -515,8 +515,110 @@ contract DavinciDaoComprehensiveTest is Test {
         assertEq(census.tokenDelegate(keccak256(abi.encodePacked(uint256(0), uint256(1)))), address(0));
 
         // After delegation
-        census.delegate(bob, 0, ids, emptyProof);
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
         assertEq(census.tokenDelegate(keccak256(abi.encodePacked(uint256(0), uint256(1)))), bob);
+
+        vm.stopPrank();
+    }
+
+    /// @notice Test that delegation persists across NFT transfers but can be cleared with proof
+    /// This test verifies that when an NFT is transferred to a new owner,
+    /// the new owner can delegate it by providing proof to clear the inherited delegation.
+    function testDelegationPersistsAcrossNFTTransfer() public {
+        vm.startPrank(alice);
+
+        // Step 1: Alice delegates token 1 to Bob
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = 1;
+        uint256[] memory emptyProof = new uint256[](0);
+
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
+
+        // Verify delegation succeeded
+        (uint88 bobWeight,) = census.getDelegations(bob);
+        assertEq(bobWeight, 1, "Bob should have weight 1 after delegation");
+
+        // Verify token is marked as delegated
+        bytes32 tokenKey = keccak256(abi.encodePacked(uint256(0), uint256(1)));
+        assertEq(census.tokenDelegate(tokenKey), bob, "Token 1 should be delegated to Bob");
+
+        // Step 2: Transfer token 1 from Alice to Charlie
+        nft.transferFrom(alice, charlie, 1);
+
+        // Verify Charlie now owns the token
+        assertEq(nft.ownerOf(1), charlie, "Charlie should own token 1 after transfer");
+
+        // Verify delegation still persists (this is the key behavior)
+        assertEq(census.tokenDelegate(tokenKey), bob, "Token 1 should still be delegated to Bob after transfer");
+
+        vm.stopPrank();
+
+        // Step 3: Charlie (new owner) tries to delegate token 1 to Dave WITHOUT providing proof
+        vm.startPrank(charlie);
+
+        uint256[] memory ids2 = new uint256[](1);
+        ids2[0] = 1;
+
+        // This should fail with ProofRequired error because Bob needs proof to clear his delegation
+        vm.expectRevert(abi.encodeWithSelector(DavinciDaoCensus.ProofRequired.selector, bob));
+        census.delegate(dave, 0, ids2, emptyProof, new DavinciDaoCensus.ProofInput[](0));
+
+        // Step 4: Charlie provides the correct proof for Bob and successfully delegates to Dave
+        DavinciDaoCensus.ProofInput[] memory fromProofs = new DavinciDaoCensus.ProofInput[](1);
+        fromProofs[0] = DavinciDaoCensus.ProofInput({account: bob, siblings: emptyProof});
+
+        census.delegate(dave, 0, ids2, emptyProof, fromProofs);
+
+        // Verify the delegation was transferred
+        (bobWeight,) = census.getDelegations(bob);
+        (uint88 daveWeight,) = census.getDelegations(dave);
+        assertEq(bobWeight, 0, "Bob should have weight 0 after inherited delegation cleared");
+        assertEq(daveWeight, 1, "Dave should have weight 1 after delegation");
+        assertEq(census.tokenDelegate(tokenKey), dave, "Token 1 should now be delegated to Dave");
+
+        vm.stopPrank();
+    }
+
+    /// @notice Test that new owner can delegate directly with inherited delegation handling
+    /// This test shows that the new owner can delegate directly, and the contract
+    /// automatically clears the inherited delegation with the provided proof
+    function testNewOwnerCanDelegateWithInheritedDelegation() public {
+        vm.startPrank(alice);
+
+        // Step 1: Alice delegates token 1 to Bob
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = 1;
+        uint256[] memory emptyProof = new uint256[](0);
+
+        census.delegate(bob, 0, ids, emptyProof, new DavinciDaoCensus.ProofInput[](0));
+
+        // Verify Bob has weight 1 (single node tree, no siblings)
+        (uint88 bobWeight,) = census.getDelegations(bob);
+        assertEq(bobWeight, 1, "Bob should have weight 1 after delegation");
+
+        // Step 2: Transfer token 1 from Alice to Charlie
+        nft.transferFrom(alice, charlie, 1);
+
+        vm.stopPrank();
+
+        // Step 3: Charlie can now delegate directly by providing proof for Bob
+        vm.startPrank(charlie);
+
+        // Charlie provides proof for Bob to clear the inherited delegation
+        DavinciDaoCensus.ProofInput[] memory fromProofs = new DavinciDaoCensus.ProofInput[](1);
+        fromProofs[0] = DavinciDaoCensus.ProofInput({account: bob, siblings: emptyProof});
+
+        // Charlie successfully delegates to Dave, automatically clearing Bob's delegation
+        census.delegate(dave, 0, ids, emptyProof, fromProofs);
+
+        // Verify the delegation was transferred
+        (bobWeight,) = census.getDelegations(bob);
+        (uint88 daveWeight,) = census.getDelegations(dave);
+        assertEq(bobWeight, 0, "Bob should have weight 0 after inherited delegation cleared");
+        assertEq(daveWeight, 1, "Dave should have weight 1 after delegation");
+
+        bytes32 tokenKey = keccak256(abi.encodePacked(uint256(0), uint256(1)));
+        assertEq(census.tokenDelegate(tokenKey), dave, "Token 1 should now be delegated to Dave");
 
         vm.stopPrank();
     }

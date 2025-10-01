@@ -747,18 +747,24 @@ export class DavinciDaoContract {
 
   /**
    * Delegate tokens to an address
+   * @param to - Address to delegate to
+   * @param collectionIndex - Collection index
+   * @param tokenIds - Token IDs to delegate
+   * @param proof - Merkle proof for the 'to' address (empty if new delegate)
+   * @param fromProofs - Proofs for clearing inherited delegations (empty if no inherited delegations)
    */
   async delegate(
     to: string, 
     collectionIndex: number, 
     tokenIds: string[] | number[], 
-    proof: string[] = []
+    proof: string[] = [],
+    fromProofs: ProofInput[] = []
   ): Promise<string> {
     try {
       const signerContract = await this.getSignerContract()
       // Convert tokenIds to numbers if they're strings
       const tokenIdsAsNumbers = tokenIds.map(id => typeof id === 'string' ? parseInt(id, 10) : id)
-      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, proof)
+      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, proof, fromProofs)
       return tx.hash
     } catch (error: unknown) {
       console.error('Delegation failed:', error)
