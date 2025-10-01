@@ -1,6 +1,8 @@
 import { DavinciDaoContract } from './contract'
 import { MerkleTreeNode, CensusData } from '~/types'
 import { STORAGE_KEYS, UI_CONFIG } from './constants'
+import { poseidon2 } from 'poseidon-lite'
+import { LeanIMT } from '@zk-kit/lean-imt'
 
 /**
  * Rate limit error detection and retry utility for merkle operations
@@ -80,98 +82,6 @@ interface MerkleTreeCacheIndex {
   trees: { [merkleRoot: string]: MerkleTreeCacheEntry }
   currentRoot?: string
   maxCacheSize: number
-}
-
-/**
- * Simple Lean-IMT implementation for browser
- * This is a simplified version for proof generation
- */
-export class LeanIMT {
-  private leaves: string[] = []
-  private tree: string[][] = []
-
-  constructor(leaves: string[] = []) {
-    this.leaves = [...leaves]
-    this.buildTree()
-  }
-
-  private buildTree() {
-    if (this.leaves.length === 0) {
-      this.tree = []
-      return
-    }
-
-    this.tree = [this.leaves]
-    let currentLevel = this.leaves
-
-    while (currentLevel.length > 1) {
-      const nextLevel: string[] = []
-      
-      for (let i = 0; i < currentLevel.length; i += 2) {
-        const left = currentLevel[i]
-        const right = i + 1 < currentLevel.length ? currentLevel[i + 1] : left
-        
-        // Simple hash combination (in real implementation, use proper hashing)
-        const combined = this.hash(left, right)
-        nextLevel.push(combined)
-      }
-      
-      this.tree.push(nextLevel)
-      currentLevel = nextLevel
-    }
-  }
-
-  private hash(left: string, right: string): string {
-    // Use keccak256 for proper hashing (matches Ethereum standards)
-    // Note: This is a simplified implementation. In production, you'd want to use
-    // the same hash function as the contract (Poseidon for Lean-IMT)
-    try {
-      const leftBN = BigInt(left)
-      const rightBN = BigInt(right)
-      
-      // Simple but deterministic hash combination
-      // In production, replace with proper Poseidon hash or keccak256
-      const combined = leftBN ^ (rightBN << 1n)
-      return combined.toString()
-    } catch (error) {
-      console.warn('Hash function error, falling back to simple combination:', error)
-      return (BigInt(left) + BigInt(right)).toString()
-    }
-  }
-
-  getRoot(): string {
-    if (this.tree.length === 0) return '0'
-    const topLevel = this.tree[this.tree.length - 1]
-    return topLevel[0] || '0'
-  }
-
-  getSiblings(leafIndex: number): string[] {
-    if (leafIndex >= this.leaves.length) return []
-    
-    const siblings: string[] = []
-    let currentIndex = leafIndex
-
-    for (let level = 0; level < this.tree.length - 1; level++) {
-      const currentLevel = this.tree[level]
-      const siblingIndex = currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1
-      
-      if (siblingIndex < currentLevel.length) {
-        siblings.push(currentLevel[siblingIndex])
-      }
-      
-      currentIndex = Math.floor(currentIndex / 2)
-    }
-
-    return siblings
-  }
-
-  indexOf(leaf: string): number {
-    return this.leaves.indexOf(leaf)
-  }
-
-  getLeaves(): string[] {
-    return [...this.leaves]
-  }
 }
 
 /**
@@ -855,14 +765,21 @@ export class MerkleTreeReconstructor {
 }
 
 /**
- * Generate merkle proofs for addresses
+ * Generate merkle proofs for addresses using official LeanIMT library
  */
 export function generateProofs(censusData: CensusData, addresses: string[]): { [address: string]: string[] } {
   console.log('=== Generating proofs ===')
   console.log('Census data nodes:', censusData.nodes.length)
   console.log('Addresses to generate proofs for:', addresses)
   
-  const tree = new LeanIMT(censusData.nodes.map(node => node.leaf))
+  // Create LeanIMT with Poseidon hash function
+  const tree = new LeanIMT((a, b) => poseidon2([a, b]))
+  
+  // Insert all leaves in order
+  for (const node of censusData.nodes) {
+    tree.insert(BigInt(node.leaf))
+  }
+  
   const proofs: { [address: string]: string[] } = {}
 
   for (const address of addresses) {
@@ -876,12 +793,15 @@ export function generateProofs(censusData: CensusData, addresses: string[]): { [
     console.log(`Found node for ${address}:`, node)
     
     if (node) {
-      const leafIndex = tree.indexOf(node.leaf)
+      const leafBigInt = BigInt(node.leaf)
+      const leafIndex = tree.indexOf(leafBigInt)
       console.log(`Leaf index for ${address}: ${leafIndex}`)
       console.log(`Node leaf: ${node.leaf}`)
       
       if (leafIndex !== -1) {
-        const siblings = tree.getSiblings(leafIndex)
+        const proof = tree.generateProof(leafIndex)
+        // Convert siblings from bigint to string
+        const siblings = proof.siblings.map(s => s.toString())
         proofs[address] = siblings
         
         console.log(`Generated ${siblings.length} proof elements for ${address}:`, siblings)
