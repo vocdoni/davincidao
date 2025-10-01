@@ -13,7 +13,8 @@ import {
 export const useDelegation = (
   contract: DavinciDaoContract | null,
   userNFTs: NFTInfo[],
-  userAddress: string | undefined
+  userAddress: string | undefined,
+  onTransactionSuccess?: () => void | Promise<void>
 ) => {
   const [delegationState, setDelegationState] = useState<DelegationState>({
     ownedTokens: new Map(),
@@ -446,8 +447,10 @@ export const useDelegation = (
         console.log(`Operation ${operation.type} completed with tx: ${txHash}`)
       }
 
-      // Reset pending changes after successful execution
-      initializeDelegationState()
+      // Trigger data refresh callback if provided
+      if (onTransactionSuccess) {
+        await onTransactionSuccess()
+      }
       
     } catch (err) {
       const error = err as Error
@@ -456,7 +459,7 @@ export const useDelegation = (
     } finally {
       setIsLoading(false)
     }
-  }, [contract, userAddress, initializeDelegationState, delegationState.delegates]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contract, userAddress, onTransactionSuccess, delegationState.delegates]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper function to allocate available tokens for delegation
   const allocateTokensForDelegation = useCallback(async (
@@ -900,8 +903,10 @@ export const useDelegation = (
 
       console.log(`Operation ${operation.type} completed with tx: ${txHash}`)
       
-      // Refresh delegation state after successful execution
-      initializeDelegationState()
+      // Trigger data refresh callback if provided
+      if (onTransactionSuccess) {
+        await onTransactionSuccess()
+      }
       
     } catch (err) {
       const error = err as Error

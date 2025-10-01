@@ -14,12 +14,14 @@ interface DelegationManagerProps {
   contract: DavinciDaoContract | null
   userNFTs: NFTInfo[]
   userAddress: string | undefined
+  onDataRefresh?: () => void | Promise<void>
 }
 
 export const DelegationManager = ({ 
   contract, 
   userNFTs, 
-  userAddress
+  userAddress,
+  onDataRefresh
 }: DelegationManagerProps) => {
   const [showAddDelegate, setShowAddDelegate] = useState(false)
   const [isExecuting] = useState(false)
@@ -42,7 +44,7 @@ export const DelegationManager = ({
     executeOperation,
     resetPendingChanges,
     hasPendingChanges
-  } = useDelegation(contract, userNFTs, userAddress)
+  } = useDelegation(contract, userNFTs, userAddress, onDataRefresh)
 
   // Initialize when NFTs change
   useEffect(() => {

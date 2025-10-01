@@ -356,6 +356,7 @@ function DashboardContent() {
               contract={contract}
               userNFTs={userNFTs}
               userAddress={address}
+              onDataRefresh={loadInitialData}
             />
           </div>
 
