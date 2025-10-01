@@ -882,19 +882,9 @@ export function generateProofs(censusData: CensusData, addresses: string[]): { [
       
       if (leafIndex !== -1) {
         const siblings = tree.getSiblings(leafIndex)
+        proofs[address] = siblings
         
-        // CRITICAL: For single-node trees, the contract still requires a proof for weight updates
-        // Even though mathematically there are no siblings, we need to provide the current leaf
-        // as a "proof" that it exists in the tree
-        if (censusData.nodes.length === 1 && siblings.length === 0) {
-          console.log(`Single-node tree: providing current leaf as proof`)
-          // For single-node trees, provide the current leaf value as proof
-          proofs[address] = [node.leaf]
-        } else {
-          proofs[address] = siblings
-        }
-        
-        console.log(`Generated ${proofs[address].length} proof elements for ${address}:`, proofs[address])
+        console.log(`Generated ${siblings.length} proof elements for ${address}:`, siblings)
       } else {
         console.error(`Leaf not found in tree for ${address}`)
       }
