@@ -16,7 +16,7 @@ contract DeployDavinciDaoScript is Script {
         address[] memory tokens = new address[](1);
 
         // Example collections (replace with real addresses)
-        tokens[0] = 0x0FaC6B282b1c1dfde72266813175b5f05591BC11; // Example ERC-721 collection
+        tokens[0] = 0x7c61Ae9629664D1CEEc8Abc0fD17CB0866d86d89; // Example ERC-721 collection
 
         // Deploy the DavinciDAO Census contract with salt for unique address
         bytes32 salt = keccak256(abi.encodePacked(block.timestamp, block.prevrandao));
