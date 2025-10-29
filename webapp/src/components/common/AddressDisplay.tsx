@@ -70,11 +70,8 @@ export const AddressDisplay = ({
       )}
       
       <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono break-all">
-        {/* Show full address by default, shortened only on small screens */}
-        <span className={showFull ? '' : 'hidden sm:inline'}>{address}</span>
-        {!showFull && (
-          <span className="sm:hidden">{formatAddress(address)}</span>
-        )}
+        {/* Always show shortened format by default (0x3316...5de1), unless showFull is true */}
+        {showFull ? address : formatAddress(address)}
       </code>
       
       <div className="flex items-center gap-1 ml-1">

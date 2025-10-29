@@ -23,7 +23,7 @@ type TokenInfo struct {
 // DiscoverOwnedNFTs discovers all NFTs owned by the given address across all collections
 func DiscoverOwnedNFTs(
 	ctx context.Context,
-	censusContract *census.DavinciDaoCensus,
+	censusContract *census.DavinciDao,
 	owner common.Address,
 ) ([]*TokenInfo, error) {
 	fmt.Printf("🔍 Discovering NFTs owned by %s...\n", owner.Hex())
@@ -63,7 +63,7 @@ func DiscoverOwnedNFTs(
 }
 
 // getCollectionCount attempts to determine the number of collections
-func getCollectionCount(contract *census.DavinciDaoCensus) (int, error) {
+func getCollectionCount(contract *census.DavinciDao) (int, error) {
 	count := 0
 	for i := 0; i < 100; i++ { // Reasonable upper limit
 		_, err := contract.Collections(nil, big.NewInt(int64(i)))
@@ -114,7 +114,7 @@ func tryEnumerableDiscovery(
 func DiscoverUndelegatedNFTs(
 	ctx context.Context,
 	client bind.ContractBackend,
-	censusContract *census.DavinciDaoCensus,
+	censusContract *census.DavinciDao,
 	owner common.Address,
 	collectionIndex *big.Int,
 	maxTokenID int64,
@@ -169,7 +169,7 @@ func checkEnumerableSupport(contract *erc721.ERC721) (bool, error) {
 // discoverViaEnumerable uses tokenOfOwnerByIndex to find NFTs
 func discoverViaEnumerable(
 	nftContract *erc721.ERC721,
-	censusContract *census.DavinciDaoCensus,
+	censusContract *census.DavinciDao,
 	owner common.Address,
 	collectionAddr common.Address,
 	collectionIndex *big.Int,
@@ -213,7 +213,7 @@ func discoverViaEnumerable(
 // scanForOwnedTokens scans token IDs to find owned tokens
 func scanForOwnedTokens(
 	nftContract *erc721.ERC721,
-	censusContract *census.DavinciDaoCensus,
+	censusContract *census.DavinciDao,
 	owner common.Address,
 	collectionAddr common.Address,
 	collectionIndex *big.Int,
@@ -261,9 +261,9 @@ func scanForOwnedTokens(
 	return undelegated, nil
 }
 
-// GetTokenDelegation checks if a token is delegated (exported version)
+// GetTokenDelegation checks if a token is delegated
 func GetTokenDelegation(
-	contract *census.DavinciDaoCensus,
+	contract *census.DavinciDao,
 	collectionIndex *big.Int,
 	tokenID *big.Int,
 ) (common.Address, error) {
@@ -272,7 +272,7 @@ func GetTokenDelegation(
 
 // getTokenDelegation checks if a token is delegated
 func getTokenDelegation(
-	contract *census.DavinciDaoCensus,
+	contract *census.DavinciDao,
 	collectionIndex *big.Int,
 	tokenID *big.Int,
 ) (common.Address, error) {

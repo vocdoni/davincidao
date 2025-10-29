@@ -1,0 +1,42 @@
+"""Account with voting weight from delegated NFTs"""
+type Account @entity(immutable: false) {
+  id: ID!                              # address (lowercase)
+  address: Bytes!                      # original address
+  weight: BigInt!                      # current weight (number of delegated NFTs)
+  lastUpdatedAt: BigInt!               # timestamp
+  lastUpdatedBlock: BigInt!            # block number
+  receivedDelegations: [TokenDelegation!]! @derivedFrom(field: "delegateAccount")
+}
+
+"""NFT delegation status"""
+type TokenDelegation @entity(immutable: false) {
+  id: ID!                              # ${nftIndex}-${tokenId}
+  nftIndex: BigInt!                    # collection index
+  tokenId: BigInt!                     # token ID
+  delegate: Bytes!                     # current delegate address (zero if undelegated)
+  delegateAccount: Account             # Account entity (null if undelegated)
+  owner: Bytes!                        # token owner at time of last delegation/undelegation
+  isDelegated: Boolean!                # true if currently delegated
+  delegatedAt: BigInt!                 # timestamp of last delegation
+  delegatedBlock: BigInt!              # block of last delegation
+  transactionHash: Bytes!
+}
+
+"""Census root snapshot (immutable - each update creates new entry)"""
+type CensusRoot @entity(immutable: true) {
+  id: ID!                              # txHash-logIndex
+  root: BigInt!                        # Merkle root
+  updater: Bytes!                      # address that updated the root
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+"""Global statistics"""
+type GlobalStats @entity(immutable: false) {
+  id: ID!                              # "global"
+  totalDelegations: BigInt!            # total active delegations
+  totalAccounts: BigInt!               # accounts with weight > 0
+  totalWeight: BigInt!                 # sum of all weights
+  lastUpdatedAt: BigInt!
+}

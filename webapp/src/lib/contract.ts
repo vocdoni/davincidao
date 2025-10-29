@@ -1,7 +1,8 @@
-import { Contract, BrowserProvider, JsonRpcProvider, Wallet, keccak256, solidityPacked } from 'ethers'
+import { Contract, BrowserProvider, JsonRpcProvider, Wallet } from 'ethers'
 import { DAVINCI_DAO_ABI, ERC721_ABI, CONTRACT_CONFIG, ERROR_MESSAGES, UI_CONFIG, ERC721_INTERFACE_IDS } from './constants'
 import { Collection, ProofInput, NFTInfo, DelegationInfo, CollectionStats, TokenMetadata } from '~/types'
 import { alchemyService } from './alchemy-service'
+import { getSubgraphClient, isSubgraphInitialized } from './subgraph-client'
 
 /**
  * Rate limit error detection and retry utility
@@ -213,6 +214,24 @@ export class DavinciDaoContract {
           console.log('Census tree is empty, returning 0')
           return BigInt(0)
         }
+        throw error
+      }
+    })
+  }
+
+  /**
+   * Validate a census root and get the block number when it was set
+   * Returns 0 if the root was never valid
+   */
+  async getRootBlockNumber(root: string | bigint): Promise<bigint> {
+    return await RateLimitHandler.executeWithRetry(async () => {
+      try {
+        // Convert string to bigint if needed
+        const rootBigInt = typeof root === 'string' ? BigInt(root) : root
+        const blockNumber = await this.contract.getRootBlockNumber(rootBigInt)
+        return blockNumber
+      } catch (error) {
+        console.error('Failed to get root block number:', error)
         throw error
       }
     })
@@ -448,233 +467,244 @@ export class DavinciDaoContract {
   }
 
   /**
-   * Get user's NFTs using improved discovery strategy:
-   * 1. Try ERC721Enumerable (tokenOfOwnerByIndex) - fastest if supported
-   * 2. Fallback to Alchemy API - reliable for all contracts
-   * 3. Show error if both fail
+   * Get user's NFTs using Alchemy API
+   * Both Alchemy and Subgraph are REQUIRED for DavinciDAO V2
    */
-  async getUserNFTs(userAddress: string): Promise<NFTInfo[]> {
-    try {
-      const collections = await this.getAllCollections()
-      const allNFTs: NFTInfo[] = []
+  async getUserNFTs(userAddress: string, forceRefresh = false): Promise<NFTInfo[]> {
+    // Initialize Alchemy service if not already done
+    if (!alchemyService.isInitialized()) {
+      const network = await this.provider.getNetwork()
+      const initialized = alchemyService.initialize(Number(network.chainId))
+      if (!initialized) {
+        throw new Error('Alchemy service failed to initialize. Check VITE_ALCHEMY_API_KEY.')
+      }
+    }
 
-      // Initialize Alchemy service if not already done
-      if (!alchemyService.isInitialized()) {
-        const network = await this.provider.getNetwork()
-        alchemyService.initialize(Number(network.chainId))
+    // Verify subgraph is initialized
+    if (!isSubgraphInitialized()) {
+      throw new Error('Subgraph is not initialized. Check VITE_SUBGRAPH_ENDPOINT.')
+    }
+
+    console.log('Fetching user NFTs...')
+    const collections = await this.getAllCollections()
+    const allNFTs: NFTInfo[] = []
+
+    for (let collectionIndex = 0; collectionIndex < collections.length; collectionIndex++) {
+      const collection = collections[collectionIndex]
+
+      // Validate collection token address
+      if (!collection.token || collection.token === '0x0000000000000000000000000000000000000000') {
+        console.warn(`Skipping collection ${collectionIndex}: invalid token address`)
+        continue
       }
 
-      for (let collectionIndex = 0; collectionIndex < collections.length; collectionIndex++) {
-        const collection = collections[collectionIndex]
-        
-        // Validate collection token address
-        if (!collection.token || collection.token === '0x0000000000000000000000000000000000000000') {
-          console.warn(`Skipping collection ${collectionIndex}: invalid token address`)
-          continue
+      console.log(`Discovering NFTs for collection ${collectionIndex} (${collection.token})`)
+
+      // Fetch NFTs from Alchemy
+      const nfts = await alchemyService.getNFTsForOwner(
+        userAddress,
+        [collection.token],
+        forceRefresh
+      )
+
+      // Update collection index and add to results
+      const updatedNfts = nfts.map(nft => ({ ...nft, collectionIndex }))
+
+      if (updatedNfts.length > 0) {
+        console.log(`✓ Found ${updatedNfts.length} NFTs for collection ${collectionIndex}`)
+
+        // Get delegation status from subgraph
+        await this.fillDelegationStatus(updatedNfts)
+
+        allNFTs.push(...updatedNfts)
+      } else {
+        console.log(`No NFTs found for collection ${collectionIndex}`)
+      }
+    }
+
+    console.log(`✓ Total NFTs discovered: ${allNFTs.length}`)
+    return allNFTs
+  }
+
+  /**
+   * Fill delegation status for NFTs using subgraph batch queries
+   */
+  private async fillDelegationStatus(nfts: NFTInfo[]): Promise<void> {
+    console.log(`\n========== FILLING DELEGATION STATUS ==========`)
+    console.log(`Processing ${nfts.length} NFTs...`)
+
+    // Group NFTs by collection for efficient batch processing
+    const nftsByCollection = new Map<number, NFTInfo[]>()
+    for (const nft of nfts) {
+      if (!nftsByCollection.has(nft.collectionIndex)) {
+        nftsByCollection.set(nft.collectionIndex, [])
+      }
+      nftsByCollection.get(nft.collectionIndex)!.push(nft)
+    }
+
+    let subgraph
+    try {
+      subgraph = getSubgraphClient()
+      console.log(`✓ Subgraph client initialized`)
+    } catch (error) {
+      console.error(`❌ CRITICAL: Subgraph client not initialized!`, error)
+      console.error(`All NFTs will show as undelegated. Check VITE_SUBGRAPH_ENDPOINT.`)
+      return
+    }
+
+    // Query subgraph for each collection
+    for (const [collectionIndex, collectionNfts] of nftsByCollection) {
+      try {
+        const tokenIds = collectionNfts.map(nft => nft.tokenId)
+        console.log(`\n--- Collection ${collectionIndex} ---`)
+        console.log(`Querying subgraph for ${tokenIds.length} tokens`)
+        console.log(`Token IDs:`, tokenIds.slice(0, 10), tokenIds.length > 10 ? `... and ${tokenIds.length - 10} more` : '')
+
+        // Query subgraph first for efficiency
+        const delegations = await subgraph.getTokenDelegations(collectionIndex, tokenIds)
+        console.log(`📊 Subgraph returned ${delegations.length} delegation records`)
+
+        if (delegations.length > 0) {
+          console.log(`Sample delegations:`, delegations.slice(0, 3).map(d => ({
+            tokenId: d.tokenId,
+            delegate: d.delegate,
+            isDelegated: d.isDelegated,
+            owner: d.owner
+          })))
+          console.log(`ALL delegated token IDs from subgraph:`, delegations.filter(d => d.isDelegated).map(d => d.tokenId))
         }
-        
-        const tokenContract = new Contract(collection.token, ERC721_ABI, this.provider)
 
+        // ==================================================================================
+        // CRITICAL: ALWAYS query blockchain for delegation status (SOURCE OF TRUTH)
+        // ==================================================================================
+        // The subgraph can lag behind by minutes/hours due to:
+        // - Block indexing delays
+        // - Missed events
+        // - Network issues
+        //
+        // If we rely only on subgraph data, we'll try to delegate already-delegated tokens
+        // and the contract will revert with AlreadyDelegated error.
+        //
+        // BLOCKCHAIN DATA IS THE ONLY RELIABLE SOURCE FOR MERKLE PROOF GENERATION
+        // ==================================================================================
+        console.log(`⚠️  Verifying delegation status from blockchain...`)
         try {
-          console.log(`Discovering NFTs for collection ${collectionIndex} (${collection.token})`)
+          const blockchainDelegates = await this.contract.getTokenDelegations(collectionIndex, tokenIds)
+          console.log(`✓ Blockchain query complete for ${blockchainDelegates.length} tokens`)
 
-          // STEP 1: Try ERC721Enumerable first
-          const nftsFromEnumerable = await this.tryEnumerableDiscovery(
-            tokenContract, 
-            userAddress, 
-            collectionIndex
-          )
-
-          if (nftsFromEnumerable.length > 0) {
-            console.log(`✓ Found ${nftsFromEnumerable.length} NFTs using ERC721Enumerable`)
-            allNFTs.push(...nftsFromEnumerable)
-            continue // Success, move to next collection
-          }
-
-          // STEP 2: Try Alchemy API
-          if (alchemyService.isInitialized()) {
-            const nftsFromAlchemy = await this.tryAlchemyDiscovery(
-              [collection.token],
-              userAddress,
-              collectionIndex
-            )
-
-            if (nftsFromAlchemy.length > 0) {
-              console.log(`✓ Found ${nftsFromAlchemy.length} NFTs using Alchemy API`)
-              allNFTs.push(...nftsFromAlchemy)
-              continue // Success, move to next collection
+          let blockchainDelegatedCount = 0
+          const blockchainDelegatedTokens: string[] = []
+          for (let i = 0; i < tokenIds.length; i++) {
+            const delegate = blockchainDelegates[i]
+            if (delegate && delegate !== '0x0000000000000000000000000000000000000000') {
+              blockchainDelegatedCount++
+              blockchainDelegatedTokens.push(tokenIds[i])
             }
           }
 
-          // STEP 3: Check if user has balance but we couldn't discover NFTs
-          const balance = await tokenContract.balanceOf(userAddress)
-          if (Number(balance) > 0) {
-            console.warn(`⚠️ User has ${balance} NFTs in collection ${collectionIndex} but discovery failed`)
-            console.warn('Contract does not support enumeration and Alchemy is not configured')
+          console.log(`📊 Blockchain shows ${blockchainDelegatedCount} delegated tokens`)
+          if (blockchainDelegatedCount > 0) {
+            console.log(`Blockchain delegated token IDs:`, blockchainDelegatedTokens.slice(0, 20))
           }
 
-        } catch (error: unknown) {
-          console.error(`Failed to discover NFTs for collection ${collectionIndex}:`, error)
-        }
-      }
-
-      return allNFTs
-    } catch (error: unknown) {
-      console.error('Failed to get user NFTs:', error)
-      throw new Error(ERROR_MESSAGES.CONTRACT_ERROR)
-    }
-  }
-
-  /**
-   * Try to discover NFTs using ERC721Enumerable interface
-   */
-  private async tryEnumerableDiscovery(
-    tokenContract: Contract,
-    userAddress: string,
-    collectionIndex: number
-  ): Promise<NFTInfo[]> {
-    try {
-      // Check if contract supports enumerable interface
-      const supportsEnumerable = await tokenContract.supportsInterface(
-        ERC721_INTERFACE_IDS.ERC721_ENUMERABLE
-      )
-
-      if (!supportsEnumerable) {
-        return []
-      }
-
-      const balance = await tokenContract.balanceOf(userAddress)
-      const nfts: NFTInfo[] = []
-
-      // Enumerate all tokens owned by user
-      for (let i = 0; i < Number(balance); i++) {
-        try {
-          const tokenId = await tokenContract.tokenOfOwnerByIndex(userAddress, i)
-          const contractAddress = tokenContract.target
-          if (!contractAddress) {
-            console.error('Token contract target is null')
-            break
+          // Compare subgraph vs blockchain
+          const subgraphDelegatedCount = delegations.filter(d => d.isDelegated).length
+          if (subgraphDelegatedCount !== blockchainDelegatedCount) {
+            console.warn(`⚠️  MISMATCH: Subgraph shows ${subgraphDelegatedCount} delegated, blockchain shows ${blockchainDelegatedCount}`)
+            console.warn(`Using blockchain data as source of truth`)
           }
-          
-          nfts.push({
-            collectionIndex,
-            tokenId: tokenId.toString(),
-            collectionAddress: contractAddress as string,
-            delegatedTo: undefined, // Will be filled later
-            owned: true,
-            tokenURI: undefined,
-            name: `Token #${tokenId.toString()}`
-          })
-        } catch (error) {
-          console.warn(`Failed to get token at index ${i}:`, error)
-          break // Stop if enumeration fails
+
+          // Update NFTs with blockchain delegation status (source of truth)
+          let delegatedCount = 0
+          const updatedTokens: string[] = []
+          for (let i = 0; i < collectionNfts.length; i++) {
+            const nft = collectionNfts[i]
+            const tokenIndex = tokenIds.indexOf(nft.tokenId)
+            if (tokenIndex !== -1) {
+              const delegate = blockchainDelegates[tokenIndex]
+              if (delegate && delegate !== '0x0000000000000000000000000000000000000000') {
+                nft.delegatedTo = delegate
+                delegatedCount++
+                updatedTokens.push(nft.tokenId)
+                if (updatedTokens.length <= 10) {
+                  console.log(`  ✓ Token ${nft.tokenId} → delegated to ${delegate}`)
+                }
+              } else {
+                nft.delegatedTo = undefined
+              }
+            }
+          }
+
+          console.log(`✓ Updated ${delegatedCount} NFTs with blockchain delegation data`)
+        } catch (blockchainError) {
+          console.error(`❌ Blockchain query failed, falling back to subgraph data:`, blockchainError)
+
+          // Fallback to subgraph data if blockchain query fails
+          if (delegations.length === 0) {
+            console.warn(`⚠️ WARNING: Subgraph returned 0 delegations for collection ${collectionIndex}`)
+            console.warn(`This means either:`)
+            console.warn(`  1. No tokens are delegated yet`)
+            console.warn(`  2. Subgraph is not synced`)
+            console.warn(`  3. Subgraph query is failing`)
+          }
+
+          // Create a map for quick lookup
+          const delegationMap = new Map(delegations.map(d => [d.tokenId, d]))
+          console.log(`Created delegation map with ${delegationMap.size} entries (subgraph fallback)`)
+
+          // Update NFTs with delegation status from subgraph
+          let delegatedCount = 0
+          let skippedCount = 0
+          const updatedTokens: string[] = []
+          for (const nft of collectionNfts) {
+            const delegation = delegationMap.get(nft.tokenId)
+            if (delegation) {
+              if (delegation.isDelegated && delegation.delegate && delegation.delegate !== '0x0000000000000000000000000000000000000000') {
+                nft.delegatedTo = delegation.delegate
+                delegatedCount++
+                updatedTokens.push(nft.tokenId)
+                if (updatedTokens.length <= 10) {
+                  console.log(`  ✓ Token ${nft.tokenId} → delegated to ${delegation.delegate} (subgraph)`)
+                }
+              } else {
+                // Token has a delegation record but isDelegated=false or delegate is zero address
+                nft.delegatedTo = undefined
+                skippedCount++
+              }
+            } else {
+              // No delegation record found
+              nft.delegatedTo = undefined
+            }
+          }
+
+          console.log(`Updated ${updatedTokens.length} tokens with delegation info (subgraph):`, updatedTokens.slice(0, 10))
+
+          console.log(`✓ Updated delegation status for collection ${collectionIndex} (subgraph fallback):`)
+          console.log(`  - ${delegatedCount} delegated`)
+          console.log(`  - ${skippedCount} with delegation record but undelegated`)
+          console.log(`  - ${collectionNfts.length - delegatedCount - skippedCount} no delegation record`)
         }
+      } catch (error) {
+        console.error(`❌ Error querying subgraph for collection ${collectionIndex}:`, error)
+        console.error(`All NFTs in this collection will show as undelegated`)
+        // Continue with other collections
       }
-
-      // Get delegation status for discovered NFTs
-      if (nfts.length > 0) {
-        await this.fillDelegationStatus(nfts)
-      }
-
-      return nfts
-
-    } catch (error) {
-      console.warn('ERC721Enumerable discovery failed:', error)
-      return []
     }
-  }
 
-  /**
-   * Try to discover NFTs using Alchemy API
-   */
-  private async tryAlchemyDiscovery(
-    contractAddresses: string[],
-    userAddress: string,
-    collectionIndex: number
-  ): Promise<NFTInfo[]> {
-    try {
-      if (!alchemyService.isInitialized()) {
-        return []
-      }
+    console.log(`========== DELEGATION STATUS COMPLETE ==========`)
 
-      const nfts = await alchemyService.getNFTsForOwner(userAddress, contractAddresses)
-      
-      // Filter for this specific collection and update collection index
-      const filteredNfts = nfts
-        .filter(nft => nft.collectionIndex === collectionIndex)
-        .map(nft => ({ ...nft, collectionIndex }))
-
-      // Get delegation status for discovered NFTs
-      if (filteredNfts.length > 0) {
-        await this.fillDelegationStatus(filteredNfts)
-      }
-
-      return filteredNfts
-
-    } catch (error) {
-      console.warn('Alchemy discovery failed:', error)
-      return []
+    // Final verification: check that NFTs actually have delegatedTo populated
+    const delegatedNfts = nfts.filter(n => n.delegatedTo && n.delegatedTo !== '0x0000000000000000000000000000000000000000')
+    console.log(`🔍 Final verification: ${delegatedNfts.length} NFTs have delegatedTo field set`)
+    if (delegatedNfts.length > 0) {
+      console.log(`Sample:`, delegatedNfts.slice(0, 3).map(n => ({ tokenId: n.tokenId, delegatedTo: n.delegatedTo })))
     }
-  }
-
-  /**
-   * Fill delegation status for NFTs
-   */
-  private async fillDelegationStatus(nfts: NFTInfo[]): Promise<void> {
-    try {
-      // Group NFTs by collection for efficient batch processing
-      const nftsByCollection = new Map<number, NFTInfo[]>()
-      
-      for (const nft of nfts) {
-        if (!nftsByCollection.has(nft.collectionIndex)) {
-          nftsByCollection.set(nft.collectionIndex, [])
-        }
-        nftsByCollection.get(nft.collectionIndex)!.push(nft)
-      }
-
-      // Get delegation status for each collection
-      for (const [collectionIndex, collectionNfts] of nftsByCollection) {
-        const tokenIds = collectionNfts.map(nft => nft.tokenId)
-        const delegates = await this.getTokenDelegations(collectionIndex, tokenIds)
-        
-        // Update NFTs with delegation status
-        for (let i = 0; i < collectionNfts.length; i++) {
-          const delegate = delegates[i]
-          collectionNfts[i].delegatedTo = delegate === '0x0000000000000000000000000000000000000000' 
-            ? undefined 
-            : delegate
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fill delegation status:', error)
-    }
-  }
-
-  /**
-   * Get token delegation status (using tokenDelegate function)
-   */
-  async getTokenDelegations(collectionIndex: number, tokenIds: string[]): Promise<string[]> {
-    try {
-      const delegates: string[] = []
-      for (const tokenId of tokenIds) {
-        try {
-          // Generate the token key (same as contract's _tokenKey function)
-          const key = this.generateTokenKey(collectionIndex, tokenId)
-          const delegate = await this.contract.tokenDelegate(key)
-          delegates.push(delegate)
-        } catch {
-          delegates.push('0x0000000000000000000000000000000000000000')
-        }
-      }
-      return delegates
-    } catch (error: unknown) {
-      console.error('Failed to get token delegations:', error)
-      return tokenIds.map(() => '0x0000000000000000000000000000000000000000')
-    }
+    console.log(`\n`)
   }
 
   /**
    * Get delegated token IDs for user (using getNFTids function)
+   * NOTE: This queries the blockchain directly - it's the source of truth
    */
   async getDelegatedTokenIds(collectionIndex: number, candidateIds: string[]): Promise<string[]> {
     try {
@@ -684,14 +714,6 @@ export class DavinciDaoContract {
       console.error('Failed to get delegated token IDs:', error)
       return []
     }
-  }
-
-  /**
-   * Generate token key for delegation mapping (matches contract's _tokenKey function)
-   */
-  private generateTokenKey(collectionIndex: number, tokenId: string): string {
-    // This should match the contract's _tokenKey function: keccak256(abi.encodePacked(nftIndex, tokenId))
-    return keccak256(solidityPacked(['uint256', 'uint256'], [collectionIndex, tokenId]))
   }
 
   // ========= Collection Statistics =========
@@ -797,10 +819,10 @@ export class DavinciDaoContract {
    */
   async updateDelegation(
     newDelegate: string,
-    collectionIndex: number, 
-    tokenIds: string[], 
+    collectionIndex: number,
+    tokenIds: string[],
     fromProofs: ProofInput[],
-    toProof: string[] = []
+    toProof: bigint[] = []
   ): Promise<string> {
     try {
       const signerContract = await this.getSignerContract()

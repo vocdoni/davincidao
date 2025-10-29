@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { DelegateInfo, TransactionPlan, OperationStatus } from '~/types/delegation'
 import { formatAddress } from '~/lib/utils'
 import { Button } from '~/components/common/Button'
+import { UI_CONFIG } from '~/lib/constants'
 
 interface EnhancedPendingChangesProps {
   delegates: Map<string, DelegateInfo>
@@ -152,15 +153,25 @@ export const EnhancedPendingChanges = ({
           <div className="space-y-2 mb-4">
             {changes.map((delegate) => {
               const changeAmount = delegate.pendingCount - delegate.currentCount
+              const exceedsLimit = Math.abs(changeAmount) > UI_CONFIG.MAX_TOKENS_PER_TX
+
               return (
-                <div key={delegate.address} className="text-sm text-orange-700">
-                  <span className="font-medium">{formatAddress(delegate.address)}</span>
-                  <span className="ml-2">
-                    {delegate.currentCount} → {delegate.pendingCount} NFTs
-                  </span>
-                  <span className={`ml-2 font-medium ${changeAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ({changeAmount > 0 ? '+' : ''}{changeAmount})
-                  </span>
+                <div key={delegate.address}>
+                  <div className="text-sm text-orange-700">
+                    <span className="font-medium">{formatAddress(delegate.address)}</span>
+                    <span className="ml-2">
+                      {delegate.currentCount} → {delegate.pendingCount} NFTs
+                    </span>
+                    <span className={`ml-2 font-medium ${changeAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ({changeAmount > 0 ? '+' : ''}{changeAmount})
+                    </span>
+                  </div>
+                  {exceedsLimit && (
+                    <div className="mt-1 text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                      ⚠️ Maximum {UI_CONFIG.MAX_TOKENS_PER_TX} tokens per transaction. This will fail due to gas limits.
+                      Please reduce to {UI_CONFIG.MAX_TOKENS_PER_TX} or less.
+                    </div>
+                  )}
                 </div>
               )
             })}

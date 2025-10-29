@@ -12,7 +12,7 @@ export interface Collection {
  */
 export interface ProofInput {
   account: string
-  siblings: string[]
+  siblings: bigint[]
 }
 
 /**

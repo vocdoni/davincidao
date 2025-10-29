@@ -8,13 +8,14 @@ interface CacheEntry {
   blockNumber?: number
 }
 
+const CACHE_KEY_PREFIX = 'alchemy_nft_cache_'
+const CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+
 /**
- * Alchemy NFT service for efficient NFT discovery
+ * Alchemy NFT service for efficient NFT discovery with persistent localStorage cache
  */
 export class AlchemyService {
   private alchemy: Alchemy | null = null
-  private cache: Map<string, CacheEntry> = new Map()
-  private readonly CACHE_TTL = 5 * 60 * 1000 // 5 minutes
   private initialized = false
 
   /**
@@ -57,36 +58,60 @@ export class AlchemyService {
    * Get NFTs for owner filtered by specific contract addresses
    */
   async getNFTsForOwner(
-    owner: string, 
-    contractAddresses: string[]
+    owner: string,
+    contractAddresses: string[],
+    forceRefresh = false
   ): Promise<NFTInfo[]> {
     if (!this.isInitialized()) {
       throw new Error('Alchemy service not initialized')
     }
 
-    // Check cache first
+    // Check cache first (unless force refresh)
     const cacheKey = this.getCacheKey(owner, contractAddresses)
-    const cached = this.getFromCache(cacheKey)
-    if (cached) {
-      console.log(`Using cached NFT data for ${owner}`)
-      return cached
+    if (!forceRefresh) {
+      const cached = this.getFromCache(cacheKey)
+      if (cached) {
+        return cached
+      }
+      console.log('No cache found, fetching from Alchemy...')
+    } else {
+      console.log(`Force refresh requested: bypassing cache for ${owner}`)
     }
 
     try {
-      console.log(`Fetching NFTs from Alchemy for ${owner}`)
-      
-      const response = await this.alchemy!.nft.getNftsForOwner(owner, {
-        contractAddresses,
-        omitMetadata: true, // Save API credits
-        pageSize: 100
-      })
+      console.log(`Fetching NFTs from Alchemy API for ${owner}...`)
 
-      const nfts = this.transformAlchemyNFTs(response.ownedNfts, contractAddresses)
-      
+      let allNfts: OwnedBaseNft[] = []
+      let pageKey: string | undefined = undefined
+      let pageCount = 0
+      let response
+
+      // Fetch all pages
+      do {
+        response = await this.alchemy!.nft.getNftsForOwner(owner, {
+          contractAddresses,
+          omitMetadata: true, // Save API credits
+          pageSize: 100,
+          pageKey
+        })
+
+        allNfts = allNfts.concat(response.ownedNfts)
+        pageKey = response.pageKey
+        pageCount++
+
+        console.log(`Fetched page ${pageCount}: ${response.ownedNfts.length} NFTs (total so far: ${allNfts.length})`)
+
+        if (response.totalCount !== undefined) {
+          console.log(`Total NFTs for owner: ${response.totalCount}`)
+        }
+      } while (pageKey)
+
+      const nfts = this.transformAlchemyNFTs(allNfts, contractAddresses)
+
       // Cache the results
       this.setCache(cacheKey, nfts)
-      
-      console.log(`Found ${nfts.length} NFTs via Alchemy for ${owner}`)
+
+      console.log(`Found ${nfts.length} NFTs via Alchemy for ${owner} (fetched ${pageCount} pages)`)
       return nfts
 
     } catch (error) {
@@ -138,62 +163,78 @@ export class AlchemyService {
   }
 
   /**
-   * Get data from cache if valid
+   * Get data from localStorage cache if valid
    */
   private getFromCache(key: string): NFTInfo[] | null {
-    const entry = this.cache.get(key)
-    if (!entry) return null
+    try {
+      const cacheKey = CACHE_KEY_PREFIX + key
+      const cached = localStorage.getItem(cacheKey)
+      if (!cached) return null
 
-    const now = Date.now()
-    if (now - entry.timestamp > this.CACHE_TTL) {
-      this.cache.delete(key)
+      const entry: CacheEntry = JSON.parse(cached)
+      const now = Date.now()
+
+      // Check if cache is expired
+      if (now - entry.timestamp > CACHE_TTL) {
+        localStorage.removeItem(cacheKey)
+        return null
+      }
+
+      console.log(`✓ Using cached Alchemy data (age: ${Math.round((now - entry.timestamp) / 1000 / 60)} minutes)`)
+      return entry.data
+    } catch (error) {
+      console.warn('Failed to read from cache:', error)
       return null
     }
-
-    return entry.data
   }
 
   /**
-   * Set data in cache
+   * Set data in localStorage cache
    */
   private setCache(key: string, data: NFTInfo[]): void {
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now()
-    })
-
-    // Clean up old cache entries periodically
-    if (this.cache.size > 100) {
-      this.cleanupCache()
-    }
-  }
-
-  /**
-   * Clean up expired cache entries
-   */
-  private cleanupCache(): void {
-    const now = Date.now()
-    for (const [key, entry] of this.cache.entries()) {
-      if (now - entry.timestamp > this.CACHE_TTL) {
-        this.cache.delete(key)
+    try {
+      const cacheKey = CACHE_KEY_PREFIX + key
+      const entry: CacheEntry = {
+        data,
+        timestamp: Date.now()
       }
+      localStorage.setItem(cacheKey, JSON.stringify(entry))
+      console.log(`✓ Cached Alchemy data to localStorage`)
+    } catch (error) {
+      console.warn('Failed to write to cache:', error)
     }
   }
 
   /**
-   * Clear all cached data
+   * Clear all Alchemy cached data from localStorage
    */
   clearCache(): void {
-    this.cache.clear()
+    try {
+      const keys = Object.keys(localStorage)
+      for (const key of keys) {
+        if (key.startsWith(CACHE_KEY_PREFIX)) {
+          localStorage.removeItem(key)
+        }
+      }
+      console.log('✓ Cleared all Alchemy cache')
+    } catch (error) {
+      console.warn('Failed to clear cache:', error)
+    }
   }
 
   /**
    * Get cache statistics
    */
   getCacheStats(): { size: number; keys: string[] } {
-    return {
-      size: this.cache.size,
-      keys: Array.from(this.cache.keys())
+    try {
+      const keys = Object.keys(localStorage)
+      const cacheKeys = keys.filter(k => k.startsWith(CACHE_KEY_PREFIX))
+      return {
+        size: cacheKeys.length,
+        keys: cacheKeys.map(k => k.replace(CACHE_KEY_PREFIX, ''))
+      }
+    } catch {
+      return { size: 0, keys: [] }
     }
   }
 }

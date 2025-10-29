@@ -1,36 +1,76 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '~/components/common/Button'
 import { DavinciDaoContract } from '~/lib/contract'
 import { NFTInfo, CensusData } from '~/types'
 import { useDelegation } from '~/hooks/useDelegation'
-import { MerkleTreeReconstructor } from '~/lib/merkle'
+import { createCensusReconstructor, unpackLeaf } from '~/lib/census'
+import { MerkleTreeNode } from '~/types'
+import { formatNumber } from '~/lib/utils'
+import { CensusRoot } from '~/components/common/AddressDisplay'
 import { TokenOverview } from './TokenOverview'
 import { DelegatesList } from './DelegatesList'
 import { EnhancedPendingChanges } from './EnhancedPendingChanges'
 import { AddDelegateModal } from './AddDelegateModal'
 import { TreeVisualizationModal } from './TreeVisualizationModal'
+import { ValidateCensusRootModal } from './ValidateCensusRootModal'
 
 interface DelegationManagerProps {
   contract: DavinciDaoContract | null
   userNFTs: NFTInfo[]
   userAddress: string | undefined
   onDataRefresh?: () => void | Promise<void>
+  onRefreshCensusRoot?: () => void | Promise<void>
+  censusRoot?: string
+  userWeight?: number
+  loading?: boolean
+  contractError?: string | null
 }
 
-export const DelegationManager = ({ 
-  contract, 
-  userNFTs, 
+export const DelegationManager = ({
+  contract,
+  userNFTs,
   userAddress,
-  onDataRefresh
+  onDataRefresh,
+  onRefreshCensusRoot,
+  censusRoot: censusRootProp,
+  userWeight,
+  contractError
 }: DelegationManagerProps) => {
   const [showAddDelegate, setShowAddDelegate] = useState(false)
   const [isExecuting] = useState(false)
-  
+
   // Tree visualization state
   const [showTreeVisualization, setShowTreeVisualization] = useState(false)
+  const [showValidateCensusRoot, setShowValidateCensusRoot] = useState(false)
   const [treeData, setTreeData] = useState<CensusData | null>(null)
   const [isReconstructingTree, setIsReconstructingTree] = useState(false)
-  const [censusRoot, setCensusRoot] = useState<string>('0')
+  const [localCensusRoot, setLocalCensusRoot] = useState<string>('0')
+  const [isRefreshingCensusRoot, setIsRefreshingCensusRoot] = useState(false)
+
+  // Use prop or fallback to local state for census root
+  const censusRoot = censusRootProp || localCensusRoot
+
+  // Wrap onDataRefresh for transaction success
+  const handleTransactionSuccess = useCallback(async () => {
+    // Call the original refresh callback which will update census root
+    if (onDataRefresh) {
+      await onDataRefresh()
+    }
+  }, [onDataRefresh])
+
+  // Refresh census root only from smart contract
+  const refreshCensusRoot = useCallback(async () => {
+    setIsRefreshingCensusRoot(true)
+    try {
+      if (onRefreshCensusRoot) {
+        await onRefreshCensusRoot()
+      }
+    } catch (error) {
+      console.error('Failed to refresh census root:', error)
+    } finally {
+      setIsRefreshingCensusRoot(false)
+    }
+  }, [onRefreshCensusRoot])
 
   const {
     delegationState,
@@ -44,7 +84,7 @@ export const DelegationManager = ({
     executeOperation,
     resetPendingChanges,
     hasPendingChanges
-  } = useDelegation(contract, userNFTs, userAddress, onDataRefresh)
+  } = useDelegation(contract, userNFTs, userAddress, handleTransactionSuccess)
 
   // Initialize when NFTs change
   useEffect(() => {
@@ -56,21 +96,6 @@ export const DelegationManager = ({
     setShowAddDelegate(false)
   }
 
-  // Load current census root on component mount
-  useEffect(() => {
-    const loadCensusRoot = async () => {
-      if (contract) {
-        try {
-          const root = await contract.getCensusRoot()
-          setCensusRoot(root.toString())
-        } catch (error) {
-          console.error('Failed to load census root:', error)
-        }
-      }
-    }
-    loadCensusRoot()
-  }, [contract])
-
   // Tree reconstruction function with intelligent caching
   const handleReconstructTree = async () => {
     if (!contract) {
@@ -80,38 +105,42 @@ export const DelegationManager = ({
 
     setIsReconstructingTree(true)
     try {
-      const reconstructor = new MerkleTreeReconstructor(contract)
-      
-      // Get current census root
-      const currentRoot = await contract.getCensusRoot()
-      const currentRootStr = currentRoot.toString()
-      
-      // Check if we have cached data for this root
-      const cachedData = reconstructor.getCachedCensusData()
-      
-      if (cachedData && cachedData.root === currentRootStr) {
-        console.log('Using cached tree data for root:', currentRootStr)
-        setTreeData(cachedData)
-        setCensusRoot(cachedData.root)
-        return
+      const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
+
+      if (!subgraphEndpoint) {
+        throw new Error('Subgraph endpoint not configured')
       }
-      
-      console.log('Census root changed or no cache, reconstructing tree...')
-      console.log('Previous root:', treeData?.root || 'none')
-      console.log('Current root:', currentRootStr)
-      
-      // Reconstruct tree with progress callback
-      const censusData = await reconstructor.reconstructTree((current, total) => {
-        console.log(`Reconstructing tree: ${current}/${total}`)
-      })
-      
+
+      // Create census reconstructor using The Graph
+      const reconstructor = createCensusReconstructor(subgraphEndpoint)
+
+      // Build tree from subgraph data
+      const tree = await reconstructor.buildTree()
+
+      // Transform to UI format
+      const nodes: MerkleTreeNode[] = []
+      let index = 0
+      for (const [address, packedLeaf] of tree.leaves.entries()) {
+        const { weight } = unpackLeaf(packedLeaf)
+        nodes.push({
+          index,
+          address,
+          weight: Number(weight),
+          leaf: '0x' + packedLeaf.toString(16)
+        })
+        index++
+      }
+
+      const censusData: CensusData = {
+        root: '0x' + tree.root.toString(16),
+        nodes,
+        totalParticipants: tree.size
+      }
+
       // Update state with tree data
       setTreeData(censusData)
-      setCensusRoot(censusData.root)
-      
-      console.log(`Tree reconstructed with ${censusData.nodes.length} nodes`)
-      console.log('Census root:', censusData.root)
-      
+      setLocalCensusRoot(censusData.root)
+
     } catch (error) {
       console.error('Failed to reconstruct tree:', error)
     } finally {
@@ -119,6 +148,20 @@ export const DelegationManager = ({
     }
   }
 
+  // Census root validation function
+  const handleValidateCensusRoot = async (root: string): Promise<bigint> => {
+    if (!contract) {
+      throw new Error('Contract not available')
+    }
+
+    try {
+      const blockNumber = await contract.getRootBlockNumber(root)
+      return blockNumber
+    } catch (error) {
+      console.error('Failed to validate census root:', error)
+      throw error
+    }
+  }
 
   if (userNFTs.length === 0) {
     return (
@@ -142,36 +185,93 @@ export const DelegationManager = ({
         collectionAddresses={delegationState.collectionAddresses}
       />
 
-      {/* Census Tree Visualization - Moved before delegates */}
+      {/* Census Tree Section */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-semibold">Census Tree</h3>
             <p className="text-sm text-gray-600">
-              View the current Merkle tree structure with all delegated weights
+              Current root and verification tools
             </p>
           </div>
-          <Button
-            onClick={() => setShowTreeVisualization(true)}
-            disabled={isLoading || isExecuting}
-            variant="outline"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Visualize Tree
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowValidateCensusRoot(true)}
+              disabled={isLoading || isExecuting || !contract}
+              variant="outline"
+              size="sm"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Validate Root
+            </Button>
+            <Button
+              onClick={() => setShowTreeVisualization(true)}
+              disabled={isLoading || isExecuting}
+              variant="outline"
+              size="sm"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Visualize Tree
+            </Button>
+          </div>
         </div>
-        
-        <div className="text-sm text-gray-600">
-          <div className="flex items-center gap-4">
-            <span>Current Root: <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{censusRoot}</code></span>
+
+        <div className="space-y-4">
+          {/* Census Root */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">Current Census Root</label>
+              <button
+                onClick={refreshCensusRoot}
+                disabled={isRefreshingCensusRoot || !onRefreshCensusRoot || !!contractError}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Refresh census root from contract"
+              >
+                <svg
+                  className={`w-4 h-4 ${isRefreshingCensusRoot ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="mt-1 p-3 bg-gray-50 rounded-md">
+              {contractError ? (
+                <span className="text-gray-500">Contract not available</span>
+              ) : censusRoot && censusRoot !== '0' ? (
+                <CensusRoot root={censusRoot} />
+              ) : (
+                <span className="text-gray-500">Loading...</span>
+              )}
+            </div>
+          </div>
+
+          {/* Voting Weight */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Your Voting Weight</label>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatNumber(userWeight || 0)}
+              </div>
+            </div>
             {treeData && (
-              <span className="text-green-600">
+              <span className="text-sm text-green-600">
                 {treeData.nodes.length} participants loaded
               </span>
             )}
           </div>
+
         </div>
       </div>
 
@@ -257,6 +357,13 @@ export const DelegationManager = ({
         censusRoot={censusRoot}
         isLoading={isReconstructingTree}
         onReconstructTree={handleReconstructTree}
+      />
+
+      {/* Validate Census Root Modal */}
+      <ValidateCensusRootModal
+        isOpen={showValidateCensusRoot}
+        onClose={() => setShowValidateCensusRoot(false)}
+        onValidate={handleValidateCensusRoot}
       />
     </div>
   )

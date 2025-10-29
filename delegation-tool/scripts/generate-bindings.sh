@@ -27,23 +27,23 @@ CONTRACTS_DIR="$PROJECT_ROOT/../out"
 # Ensure bindings directory exists
 mkdir -p "$BINDINGS_DIR"
 
-echo -e "${BLUE}Generating DavinciDaoCensus bindings...${NC}"
+echo -e "${BLUE}Generating DavinciDao bindings...${NC}"
 
 # Extract ABI and Bytecode from Foundry output
-jq -r '.abi' "$CONTRACTS_DIR/Davincidao.sol/DavinciDaoCensus.json" > /tmp/DavinciDaoCensus.abi
-jq -r '.bytecode.object' "$CONTRACTS_DIR/Davincidao.sol/DavinciDaoCensus.json" > /tmp/DavinciDaoCensus.bin
+jq -r '.abi' "$CONTRACTS_DIR/DavinciDao.sol/DavinciDao.json" > /tmp/DavinciDao.abi
+jq -r '.bytecode.object' "$CONTRACTS_DIR/DavinciDao.sol/DavinciDao.json" > /tmp/DavinciDao.bin
 
 # Generate Go bindings
 mkdir -p "$BINDINGS_DIR/census"
 
 abigen \
-    --abi /tmp/DavinciDaoCensus.abi \
-    --bin /tmp/DavinciDaoCensus.bin \
+    --abi /tmp/DavinciDao.abi \
+    --bin /tmp/DavinciDao.bin \
     --pkg census \
-    --type DavinciDaoCensus \
-    --out "$BINDINGS_DIR/census/census.go"
+    --type DavinciDao \
+    --out "$BINDINGS_DIR/census/davincidao.go"
 
-echo -e "${GREEN}✓ DavinciDaoCensus bindings generated${NC}"
+echo -e "${GREEN}✓ DavinciDao bindings generated${NC}"
 
 # Generate ERC721 bindings for NFT interaction
 echo -e "${BLUE}Generating ERC721 bindings...${NC}"
@@ -96,7 +96,7 @@ abigen \
 echo -e "${GREEN}✓ ERC721 bindings generated${NC}"
 
 # Cleanup
-rm -f /tmp/DavinciDaoCensus.abi /tmp/DavinciDaoCensus.bin /tmp/ERC721.abi
+rm -f /tmp/DavinciDao.abi /tmp/DavinciDao.bin /tmp/ERC721.abi
 
 echo -e "${GREEN}=== Bindings generation complete ===${NC}"
 echo -e "Bindings location: ${BLUE}$BINDINGS_DIR${NC}"

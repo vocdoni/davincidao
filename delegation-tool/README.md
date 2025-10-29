@@ -40,7 +40,7 @@ The tool requires Go bindings for the DavinciDAO Census contract:
 
 This script:
 - Extracts ABI and bytecode from compiled Solidity contracts
-- Generates Go bindings for DavinciDaoCensus contract
+- Generates Go bindings for DavinciDao contract
 - Generates Go bindings for ERC721 interface
 - Organizes bindings in `bindings/go/` directory
 

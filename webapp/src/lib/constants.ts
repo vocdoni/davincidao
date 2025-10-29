@@ -9,6 +9,11 @@ export const CONTRACT_CONFIG: ContractConfig = {
   blockExplorerUrl: import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://sepolia.etherscan.io',
 }
 
+// V2 Configuration (gas-optimized contract with The Graph - V2 ONLY)
+export const V2_CONFIG = {
+  subgraphEndpoint: import.meta.env.VITE_SUBGRAPH_ENDPOINT || 'https://api.studio.thegraph.com/query/1704875/YOUR_PROJECT/v0.0.0',
+} as const
+
 // Alchemy network configuration mapping
 export const ALCHEMY_NETWORKS: Record<number, Network> = {
   1: Network.ETH_MAINNET,
@@ -40,30 +45,33 @@ export function getAlchemyNetwork(chainId: number): Network | null {
   return ALCHEMY_NETWORKS[chainId] || null
 }
 
-// DavinciDAO Census Contract ABI (ERC-721 only, current version)
+// DavinciDAO Census Contract ABI (Proof-based Lean-IMT implementation)
 export const DAVINCI_DAO_ABI = [
-  // View functions (matching actual contract)
+  // View functions
   'function getCensusRoot() external view returns (uint256)',
-  'function getDelegations(address account) external view returns (uint88 weight, uint256 leaf)',
-  'function getNFTids(uint256 nftIndex, uint256[] calldata candidateIds) external view returns (uint256[] memory)',
-  'function computeLeaf(address account) external view returns (uint256)',
-  'function getAccountAt(uint256 index) external view returns (address)',
-  'function weightOf(address account) external view returns (uint88)',
+  'function getRootBlockNumber(uint256 root) external view returns (uint256)',
+  'function censusRoot() external view returns (uint256)',
   'function tokenDelegate(bytes32 key) external view returns (address)',
   'function collections(uint256 index) external view returns (address token)',
-  
-  // Mutating functions (matching actual contract)
+  'function getTokenDelegations(uint256 nftIndex, uint256[] calldata tokenIds) external view returns (address[] memory)',
+  'function weightOf(address account) external view returns (uint88)',
+  'function getDelegations(address account) external view returns (uint88 weight, uint256 leaf)',
+  'function getAccountAt(uint256 index) external view returns (address)',
+  'function indexAccount(uint256 index) external view returns (address)',
+  'function computeLeaf(address account) external view returns (uint256)',
+  'function owner() external view returns (address)',
+
+  // Mutating functions (REQUIRES MERKLE PROOFS!)
   'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof, tuple(address account, uint256[] siblings)[] calldata fromProofs) external',
   'function undelegate(uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint256[] siblings)[] calldata proofs) external',
-  'function updateDelegation(address to, uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint256[] siblings)[] calldata fromProofs, uint256[] calldata toProof) external',
-  
+  'function updateCensusRoot(uint256 newRoot) external', // Owner only
+
   // Events
-  'event CollectionAdded(uint256 indexed collectionIndex, address indexed token)',
-  'event CollectionDeactivated(uint256 indexed collectionIndex, address indexed token)',
-  'event Delegated(address indexed owner, address indexed to, uint256 indexed collectionIndex, uint256 tokenId)',
-  'event Undelegated(address indexed owner, address indexed from, uint256 indexed collectionIndex, uint256 tokenId)',
+  'event Delegated(address indexed owner, address indexed to, uint256 indexed nftIndex, uint256 tokenId)',
+  'event Undelegated(address indexed owner, address indexed from, uint256 indexed nftIndex, uint256 tokenId)',
   'event WeightChanged(address indexed account, uint88 previousWeight, uint88 newWeight)',
-  'event CensusRootUpdated(uint256 newRoot)',
+  'event CensusRootUpdated(uint256 indexed newRoot, uint256 blockNumber)',
+  'event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)',
 ] as const
 
 // ERC-721 ABI (comprehensive for NFT interactions)
@@ -139,7 +147,8 @@ export const UI_CONFIG = {
   CACHE_DURATION: 5 * 60 * 1000, // 5 minutes in milliseconds
   POLLING_INTERVAL: 30 * 1000, // 30 seconds
   TREE_RECONSTRUCTION_BATCH_SIZE: 100, // Batch size for tree reconstruction
-  MAX_TOKENS_PER_TX: 20, // Maximum tokens to delegate/undelegate per transaction
+  MAX_TOKENS_PER_TX: 50, // Maximum tokens to delegate/undelegate per transaction (gas limit safety)
+  RECOMMENDED_BATCH_SIZE: 20, // Recommended batch size for optimal gas usage
   TOKEN_METADATA_CACHE_DURATION: 60 * 60 * 1000, // 1 hour for token metadata
   
   // Enhanced Merkle Tree Caching Configuration

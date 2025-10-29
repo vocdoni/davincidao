@@ -3,11 +3,11 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {DavinciDaoCensus} from "../src/Davincidao.sol";
+import {DavinciDao} from "../src/DavinciDao.sol";
 import {MockERC721Mintable} from "../src/mocks/MockERC721Mintable.sol";
 
 contract ContractVerificationTest is Test {
-    DavinciDaoCensus public census;
+    DavinciDao public census;
     MockERC721Mintable public nft721;
 
     function setUp() public {
@@ -19,7 +19,7 @@ contract ContractVerificationTest is Test {
         tokens[0] = address(nft721);
 
         // Deploy census contract
-        census = new DavinciDaoCensus(tokens);
+        census = new DavinciDao(tokens);
     }
 
     function testDeployedContractBasicFunctions() public view {

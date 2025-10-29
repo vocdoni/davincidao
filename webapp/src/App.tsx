@@ -6,6 +6,7 @@ import { ErrorBoundary } from '~/components/ErrorBoundary'
 import { useWallet } from '~/hooks/useWallet'
 import { DavinciDaoContract } from '~/lib/contract'
 import { CONTRACT_CONFIG } from '~/lib/constants'
+import { initSubgraphClient } from '~/lib/subgraph-client'
 import { formatNumber } from '~/lib/utils'
 import { Button } from '~/components/common/Button'
 import { ContractAddressInput } from '~/components/common/ContractAddressInput'
@@ -16,7 +17,7 @@ import {
   onUrlChange, 
   updateUrlWithContractAddress
 } from '~/lib/url'
-import { ContractAddress, CensusRoot, CollectionAddress } from '~/components/common/AddressDisplay'
+import { ContractAddress, CollectionAddress } from '~/components/common/AddressDisplay'
 import { MintingButton, MintingCallToAction } from '~/components/common/MintingButton'
 
 // Initialize React Query
@@ -25,15 +26,7 @@ const queryClient = new QueryClient()
 function DashboardContent() {
   const walletState = useWallet()
   const { isConnected, address, provider, privateKeyWallet, isWrongNetwork, switchNetwork } = walletState
-  
-  // Debug wallet state changes
-  console.log('DashboardContent render:', {
-    isConnected,
-    address,
-    provider: !!provider,
-    providerType: provider?.constructor?.name,
-    privateKeyWallet: !!privateKeyWallet
-  })
+
   const [censusRoot, setCensusRoot] = useState<string>('')
   const [userWeight, setUserWeight] = useState<number>(0)
   const [userNFTs, setUserNFTs] = useState<NFTInfo[]>([])
@@ -44,42 +37,63 @@ function DashboardContent() {
 
   // Contract address management
   const [currentContractAddress, setCurrentContractAddress] = useState<string>(() => {
-    // Initialize from URL or fallback to config
     const urlAddress = getContractAddressFromUrl()
     return urlAddress || CONTRACT_CONFIG.address
   })
-  
-  // Create contract instance with private key wallet if available
+
+  // Create contract instance with wallet support
   const contract = useMemo(() => {
-    console.log('Contract useMemo triggered:', { 
-      provider: !!provider, 
-      providerType: provider?.constructor?.name,
-      currentContractAddress, 
-      privateKeyWallet: !!privateKeyWallet,
-      address,
-      isConnected
-    })
     if (!provider || !currentContractAddress) {
-      console.log('Contract creation skipped - missing provider or address')
       return null
     }
-    
-    // Pass the correct wallet object to the contract for signing transactions
-    let walletForContract: { address: string } | undefined
+
+    // Use private key wallet if available, otherwise use browser wallet
     if (privateKeyWallet) {
-      // For private key connections, pass the Wallet object directly
-      const contractInstance = new DavinciDaoContract(provider, currentContractAddress, privateKeyWallet)
-      console.log('Contract instance created with private key wallet:', !!contractInstance)
-      return contractInstance
+      return new DavinciDaoContract(provider, currentContractAddress, privateKeyWallet)
     } else if (address) {
-      // For browser wallet connections, pass a simple wallet object
-      walletForContract = { address }
+      return new DavinciDaoContract(provider, currentContractAddress, { address })
     }
-    
-    const contractInstance = new DavinciDaoContract(provider, currentContractAddress, walletForContract)
-    console.log('Contract instance created:', !!contractInstance, 'with wallet:', !!walletForContract)
-    return contractInstance
-  }, [provider, currentContractAddress, privateKeyWallet, address, isConnected])
+
+    return null
+  }, [provider, currentContractAddress, privateKeyWallet, address])
+
+  // Initialize required services on app startup
+  useEffect(() => {
+    console.log('=== DavinciDAO V2 Initialization ===')
+
+    // Check Alchemy API key
+    const alchemyKey = import.meta.env.VITE_ALCHEMY_API_KEY
+    if (!alchemyKey) {
+      console.error('❌ CRITICAL: VITE_ALCHEMY_API_KEY not configured')
+      console.error('DavinciDAO V2 requires Alchemy API for NFT discovery')
+      console.error('Please add VITE_ALCHEMY_API_KEY to your .env file')
+      setContractError('Missing VITE_ALCHEMY_API_KEY in configuration. Cannot discover NFTs.')
+      return
+    }
+    console.log('✓ Alchemy API key configured')
+
+    // Check Subgraph endpoint
+    const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
+    if (!subgraphEndpoint) {
+      console.error('❌ CRITICAL: VITE_SUBGRAPH_ENDPOINT not configured')
+      console.error('DavinciDAO V2 requires The Graph subgraph for delegation data')
+      console.error('Please add VITE_SUBGRAPH_ENDPOINT to your .env file')
+      setContractError('Missing VITE_SUBGRAPH_ENDPOINT in configuration. Cannot query delegation data.')
+      return
+    }
+
+    // Initialize subgraph client
+    try {
+      initSubgraphClient(subgraphEndpoint)
+      console.log('✓ Subgraph client initialized:', subgraphEndpoint)
+    } catch (error) {
+      console.error('❌ Failed to initialize subgraph client:', error)
+      setContractError('Failed to initialize subgraph client. Please check VITE_SUBGRAPH_ENDPOINT.')
+      return
+    }
+
+    console.log('✓ All required services initialized')
+  }, [])
 
   // Handle URL changes (browser back/forward)
   useEffect(() => {
@@ -108,12 +122,22 @@ function DashboardContent() {
     }
   }, [currentContractAddress])
 
-  const loadInitialData = useCallback(async () => {
+  // Refresh only the census root from the contract
+  const refreshCensusRoot = useCallback(async () => {
+    if (!contract) return
+
+    console.log('Refreshing census root from contract...')
+    const root = await contract.getCensusRoot()
+    setCensusRoot(root.toString())
+    console.log('✓ Census root refreshed:', root.toString())
+  }, [contract])
+
+  const loadInitialData = useCallback(async (forceRefresh = false) => {
     if (!contract || !address) return
-    
+
     setLoading(true)
     setContractError(null)
-    
+
     try {
       // Check if contract exists by trying a simple call first
       const root = await contract.getCensusRoot()
@@ -127,8 +151,8 @@ function DashboardContent() {
       const collectionsData = await contract.getAllCollections()
       setCollections(collectionsData)
 
-      // Load user's NFTs (simplified for demo)
-      const nfts = await contract.getUserNFTs(address)
+      // Load user's NFTs (with optional force refresh to bypass Alchemy cache)
+      const nfts = await contract.getUserNFTs(address, forceRefresh)
       setUserNFTs(nfts)
 
       setHasLoadedOnce(true)
@@ -156,23 +180,10 @@ function DashboardContent() {
 
   // Load initial data when wallet connects (only once per connection)
   useEffect(() => {
-    console.log('useEffect triggered:', { 
-      contract: !!contract, 
-      address, 
-      hasLoadedOnce,
-      provider: !!provider,
-      privateKeyWallet: !!privateKeyWallet,
-      currentContractAddress
-    })
     if (contract && address && !hasLoadedOnce) {
-      console.log('Calling loadInitialData...')
       loadInitialData()
     }
-  }, [contract, address, hasLoadedOnce, loadInitialData, provider, privateKeyWallet, currentContractAddress])
-
-
-
-
+  }, [contract, address, hasLoadedOnce, loadInitialData])
 
 
   if (!isConnected) {
@@ -207,7 +218,12 @@ function DashboardContent() {
             </div>
             <div className="flex items-center gap-3">
               <MintingButton size="sm" variant="outline" />
-              <Button onClick={loadInitialData} disabled={loading || !!contractError} size="sm" variant="outline">
+              <Button
+                onClick={() => loadInitialData(true)}
+                disabled={loading || !!contractError}
+                size="sm"
+                variant="outline"
+              >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
@@ -274,9 +290,9 @@ function DashboardContent() {
                 </div>
                 <div className="mt-4">
                   <div className="flex space-x-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => {
                         setContractError(null)
                         setHasLoadedOnce(false)
@@ -313,39 +329,7 @@ function DashboardContent() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Census Information */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Census Root Card */}
-            <div className="card p-6">
-              <h2 className="text-lg font-semibold mb-4">Census Information</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Current Census Root</label>
-                  <div className="mt-1 p-3 bg-gray-50 rounded-md">
-                    {contractError ? (
-                      <span className="text-gray-500">Contract not available</span>
-                    ) : censusRoot ? (
-                      <CensusRoot root={censusRoot} />
-                    ) : (
-                      <span className="text-gray-500">Loading...</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Your Voting Weight</label>
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatNumber(userWeight)}
-                    </div>
-                  </div>
-                  <Button onClick={loadInitialData} disabled={loading || !!contractError}>
-                    {loading ? 'Refreshing...' : 'Refresh'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-
             {/* Show minting call-to-action if user has no NFTs */}
             {!contractError && hasLoadedOnce && userNFTs.length === 0 && (
               <MintingCallToAction />
@@ -357,6 +341,11 @@ function DashboardContent() {
               userNFTs={userNFTs}
               userAddress={address}
               onDataRefresh={loadInitialData}
+              onRefreshCensusRoot={refreshCensusRoot}
+              censusRoot={censusRoot}
+              userWeight={userWeight}
+              loading={loading}
+              contractError={contractError}
             />
           </div>
 
@@ -440,10 +429,7 @@ function DashboardContent() {
                   <span className="font-medium">{CONTRACT_CONFIG.chainId}</span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Contract</span>
-                  <div className="mt-1">
-                    <ContractAddress address={CONTRACT_CONFIG.address} />
-                  </div>
+                  <ContractAddress address={CONTRACT_CONFIG.address} />
                 </div>
               </div>
             </div>

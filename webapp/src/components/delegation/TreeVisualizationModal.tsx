@@ -3,6 +3,27 @@ import { Button } from '~/components/common/Button'
 import { MerkleTreeNode } from '~/types'
 import { CacheStatsModal } from './CacheStatsModal'
 import { formatAddress } from '~/lib/utils'
+import { toast } from 'sonner'
+
+// Copy button component
+const CopyButton = ({ value, label }: { value: string; label?: string }) => {
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value)
+    toast.success(label ? `${label} copied to clipboard` : 'Copied to clipboard')
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="ml-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+      title={`Copy ${label || 'value'}`}
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+    </button>
+  )
+}
 
 interface TreeVisualizationModalProps {
   isOpen: boolean
@@ -102,9 +123,13 @@ export const TreeVisualizationModal = ({
         <div className="px-6 py-4 bg-gray-50 border-b">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">Census Root:</span>
-            <code className="text-xs bg-gray-200 px-2 py-1 rounded font-mono">
+            <code
+              className="text-xs bg-gray-200 px-2 py-1 rounded font-mono"
+              title={censusRoot}
+            >
               {censusRoot}
             </code>
+            <CopyButton value={censusRoot} label="Census root" />
           </div>
         </div>
 
@@ -216,9 +241,13 @@ export const TreeVisualizationModal = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                          <code
+                            className="text-sm font-mono bg-gray-100 px-2 py-1 rounded cursor-help"
+                            title={node.address}
+                          >
                             {formatAddress(node.address)}
                           </code>
+                          <CopyButton value={node.address} label="Address" />
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -227,9 +256,15 @@ export const TreeVisualizationModal = ({
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <code className="text-xs text-gray-600 font-mono">
-                          {node.leaf.slice(0, 20)}...{node.leaf.slice(-10)}
-                        </code>
+                        <div className="flex items-center">
+                          <code
+                            className="text-xs text-gray-600 font-mono cursor-help"
+                            title={node.leaf}
+                          >
+                            {node.leaf.slice(0, 20)}...{node.leaf.slice(-10)}
+                          </code>
+                          <CopyButton value={node.leaf} label="Leaf value" />
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -31,11 +31,25 @@ export const useDelegation = (
 
   // Initialize delegation state from NFTs
   const initializeDelegationState = useCallback(() => {
+    console.log(`\n🔄 INITIALIZING DELEGATION STATE`)
+    console.log(`Total userNFTs received: ${userNFTs.length}`)
+
+    // Check delegation status of first few NFTs
+    const sample = userNFTs.slice(0, 20)
+    const sampleWithDelegation = sample.filter(n => n.delegatedTo)
+    console.log(`Sample of first 20 NFTs: ${sampleWithDelegation.length} have delegatedTo field`)
+    if (sampleWithDelegation.length > 0) {
+      console.log(`Sample NFTs with delegation:`, sampleWithDelegation.slice(0, 3).map(n => ({
+        tokenId: n.tokenId,
+        delegatedTo: n.delegatedTo
+      })))
+    }
+
     const ownedTokens = new Map<number, string[]>()
     const delegates = new Map<string, DelegateInfo>()
     const availableTokens = new Map<number, number>()
     const collectionAddresses = new Map<number, string>()
-    
+
     let totalOwned = 0
     let totalDelegated = 0
 
@@ -103,6 +117,18 @@ export const useDelegation = (
         weight: 0
       })
     }
+
+    console.log(`✓ Initialization complete:`)
+    console.log(`  - Total owned: ${totalOwned}`)
+    console.log(`  - Total delegated: ${totalDelegated}`)
+    console.log(`  - Delegates found: ${delegates.size}`)
+    if (delegates.size > 0) {
+      console.log(`  - Delegate addresses:`, Array.from(delegates.keys()))
+      Array.from(delegates.entries()).forEach(([addr, info]) => {
+        console.log(`    ${addr}: ${info.currentCount} tokens`)
+      })
+    }
+    console.log(`\n`)
 
     setDelegationState({
       ownedTokens,
@@ -368,9 +394,9 @@ export const useDelegation = (
 
           case 'undelegate': {
             if (!operation.from) throw new Error('Missing delegate address for undelegation')
-            
+
             // Get tokens currently delegated to this address
-            const delegatedTokens = await getTokensDelegatedTo(operation.from, operation.collectionIndex)
+            const delegatedTokens = getTokensDelegatedTo(operation.from, operation.collectionIndex)
             
             if (delegatedTokens.length === 0) {
               console.warn(`No tokens found delegated to ${operation.from}`)
@@ -391,7 +417,7 @@ export const useDelegation = (
             txHash = await contract.undelegate(
               operation.collectionIndex,
               delegatedTokens,
-              fromProofs
+              fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) }))
             )
             break
           }
@@ -434,8 +460,8 @@ export const useDelegation = (
               operation.to,
               operation.collectionIndex,
               tokensToMove,
-              fromProofs,
-              toProof
+              fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) })),
+              toProof.map((s: string) => BigInt(s))
             )
             break
           }
@@ -463,17 +489,30 @@ export const useDelegation = (
 
   // Helper function to allocate available tokens for delegation
   const allocateTokensForDelegation = useCallback(async (
-    targetDelegate: string, 
-    collectionIndex: number, 
+    targetDelegate: string,
+    collectionIndex: number,
     count: number,
     isWeightIncrease: boolean = false
   ): Promise<string[]> => {
+    const { UI_CONFIG } = await import('~/lib/constants')
+    const MAX_TOKENS = UI_CONFIG.MAX_TOKENS_PER_TX
+
+    // Enforce gas limit safety
+    if (count > MAX_TOKENS) {
+      console.error(`❌ LIMIT EXCEEDED: Requested ${count} tokens, maximum is ${MAX_TOKENS}`)
+      throw new Error(
+        `Cannot delegate ${count} tokens in a single transaction. ` +
+        `Maximum allowed: ${MAX_TOKENS} tokens. ` +
+        `Please reduce the number of tokens or perform multiple transactions.`
+      )
+    }
+
     const availableTokens = delegationState.ownedTokens.get(collectionIndex) || []
     const allocatedTokens: string[] = []
-    
+
     console.log(`Allocating tokens for ${targetDelegate}:`)
     console.log(`- Collection ${collectionIndex} has ${availableTokens.length} owned tokens`)
-    console.log(`- Need to allocate ${count} tokens`)
+    console.log(`- Need to allocate ${count} tokens (max per tx: ${MAX_TOKENS})`)
     console.log(`- Is weight increase: ${isWeightIncrease}`)
     console.log(`- Available token IDs:`, availableTokens)
     
@@ -498,8 +537,8 @@ export const useDelegation = (
       let tokensUsed = 0
       for (const tokenId of availableTokens) {
         if (tokensUsed >= count) break
-        
-        const currentDelegate = await getCurrentTokenDelegate(collectionIndex, tokenId)
+
+        const currentDelegate = getCurrentTokenDelegate(collectionIndex, tokenId)
         console.log(`- Token ${tokenId} is delegated to: ${currentDelegate || 'none'}`)
         
         // For weight increase, we can ONLY use completely undelegated tokens
@@ -516,8 +555,8 @@ export const useDelegation = (
       // For new delegations, only use completely undelegated tokens
       for (const tokenId of availableTokens) {
         if (allocatedTokens.length >= count) break
-        
-        const currentDelegate = await getCurrentTokenDelegate(collectionIndex, tokenId)
+
+        const currentDelegate = getCurrentTokenDelegate(collectionIndex, tokenId)
         console.log(`- Token ${tokenId} is delegated to: ${currentDelegate || 'none'}`)
         
         if (!currentDelegate || currentDelegate === '0x0000000000000000000000000000000000000000') {
@@ -536,17 +575,17 @@ export const useDelegation = (
   }, [delegationState.ownedTokens, delegationState.delegates]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper function to get tokens owned by the user that are delegated to a specific address
-  const getTokensDelegatedTo = useCallback(async (
-    delegate: string, 
+  const getTokensDelegatedTo = useCallback((
+    delegate: string,
     collectionIndex: number
-  ): Promise<string[]> => {
+  ): string[] => {
     // Get all tokens owned by the user in this collection
     const userOwnedTokens = delegationState.ownedTokens.get(collectionIndex) || []
     const delegatedTokens: string[] = []
     
     // Find which of the user's tokens are delegated to the specified delegate
     for (const tokenId of userOwnedTokens) {
-      const currentDelegate = await getCurrentTokenDelegate(collectionIndex, tokenId)
+      const currentDelegate = getCurrentTokenDelegate(collectionIndex, tokenId)
       if (currentDelegate && currentDelegate.toLowerCase() === delegate.toLowerCase()) {
         delegatedTokens.push(tokenId)
       }
@@ -559,21 +598,35 @@ export const useDelegation = (
     return delegatedTokens
   }, [delegationState.ownedTokens]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Helper function to get current delegate for a token
-  const getCurrentTokenDelegate = useCallback(async (
-    collectionIndex: number, 
+  // Helper function to get current delegate for a token from NFT data
+  const getCurrentTokenDelegate = useCallback((
+    collectionIndex: number,
     tokenId: string
-  ): Promise<string | null> => {
-    if (!contract) return null
-    
-    try {
-      const delegates = await contract.getTokenDelegations(collectionIndex, [tokenId])
-      return delegates[0] || null
-    } catch (error) {
-      console.warn(`Failed to get delegate for token ${tokenId}:`, error)
+  ): string | null => {
+    // Find the NFT in our loaded data
+    const nft = userNFTs.find(
+      n => n.collectionIndex === collectionIndex && n.tokenId === tokenId
+    )
+
+    if (!nft) {
+      console.warn(`❌ NFT not found in userNFTs: collection ${collectionIndex}, token ${tokenId}`)
+      console.warn(`Available NFTs count: ${userNFTs.length}`)
+      if (userNFTs.length > 0) {
+        console.warn(`First NFT sample:`, userNFTs[0])
+      }
       return null
     }
-  }, [contract])
+
+    // Debug: show what we found
+    console.log(`📋 NFT found: token ${tokenId}, delegatedTo: ${nft.delegatedTo || 'undefined'}`)
+
+    // Return the delegatedTo address if present
+    if (nft.delegatedTo && nft.delegatedTo !== '0x0000000000000000000000000000000000000000') {
+      return nft.delegatedTo
+    }
+
+    return null
+  }, [userNFTs])
 
   // Helper function to plan token movement for updateDelegation
   const planTokenMovement = useCallback(async (operation: DelegationOperation): Promise<{
@@ -607,8 +660,8 @@ export const useDelegation = (
       
       for (const tokenId of availableTokens) {
         if (tokensToMove.length >= change) break
-        
-        const currentDelegate = await getCurrentTokenDelegate(operation.collectionIndex, tokenId)
+
+        const currentDelegate = getCurrentTokenDelegate(operation.collectionIndex, tokenId)
         if (!currentDelegate || currentDelegate === '0x0000000000000000000000000000000000000000') {
           // Unallocated token - can be moved to this delegate
           tokensToMove.push(tokenId)
@@ -619,7 +672,7 @@ export const useDelegation = (
       // Need to REMOVE tokens from this delegate (change < 0)
       // Move tokens from this delegate back to unallocated state
       const tokensToRemove = Math.abs(change)
-      const currentTokens = await getTokensDelegatedTo(operation.to, operation.collectionIndex)
+      const currentTokens = getTokensDelegatedTo(operation.to, operation.collectionIndex)
       
       for (let i = 0; i < Math.min(tokensToRemove, currentTokens.length); i++) {
         tokensToMove.push(currentTokens[i])
@@ -801,9 +854,9 @@ export const useDelegation = (
 
         case 'undelegate': {
           if (!operation.from) throw new Error('Missing delegate address for undelegation')
-          
+
           // Get tokens currently delegated to this address
-          const delegatedTokens = await getTokensDelegatedTo(operation.from, operation.collectionIndex)
+          const delegatedTokens = getTokensDelegatedTo(operation.from, operation.collectionIndex)
           
           if (delegatedTokens.length === 0) {
             throw new Error(`No tokens found delegated to ${operation.from}`)
@@ -849,7 +902,7 @@ export const useDelegation = (
           txHash = await contract.undelegate(
             operation.collectionIndex,
             tokensToUndelegate,
-            fromProofs
+            fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) }))
           )
           break
         }
@@ -891,8 +944,8 @@ export const useDelegation = (
             operation.to,
             operation.collectionIndex,
             tokensToMove,
-            fromProofs,
-            toProof
+            fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) })),
+            toProof.map((s: string) => BigInt(s))
           )
           break
         }
@@ -915,7 +968,7 @@ export const useDelegation = (
     } finally {
       setIsLoading(false)
     }
-  }, [contract, userAddress, delegationState.delegates, calculateTransactionPlan, allocateTokensForDelegation, getTokensDelegatedTo, planTokenMovement, initializeDelegationState])
+  }, [contract, userAddress, delegationState.delegates, calculateTransactionPlan, allocateTokensForDelegation, getTokensDelegatedTo, planTokenMovement, onTransactionSuccess])
 
   return {
     delegationState,

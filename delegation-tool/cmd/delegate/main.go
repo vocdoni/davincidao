@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	crand "crypto/rand"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -17,15 +17,15 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/pflag"
 	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/census"
-	"github.com/vocdoni/davincidao/delegation-tool/internal/merkle"
 	"github.com/vocdoni/davincidao/delegation-tool/internal/nft"
+	"github.com/vocdoni/davincidao/delegation-tool/internal/subgraph"
 )
 
 const (
 	banner = `
 ╔═══════════════════════════════════════════════════════════╗
-║         DavinciDAO Delegation Tool v1.0                   ║
-║         Automated NFT Delegation Manager                  ║
+║         DavinciDAO Delegation Tool v2.0                   ║
+║         Automated NFT Delegation Manager (Gas Optimized)  ║
 ╚═══════════════════════════════════════════════════════════╝
 `
 )
@@ -36,8 +36,10 @@ var (
 	rpcEndpoint    string
 	privateKeyHex  string
 	alchemyAPIKey  string
+	subgraphURL    string
 	numDelegates   int
 	collectionIdx  int
+	startTokenID   int
 	maxTokenScan   int
 	tokensPerTx    int
 	confirmations  int
@@ -50,8 +52,10 @@ func init() {
 	pflag.StringVar(&rpcEndpoint, "rpc", "", "Ethereum RPC endpoint (required)")
 	pflag.StringVar(&privateKeyHex, "private-key", "", "Private key for signing transactions (required)")
 	pflag.StringVar(&alchemyAPIKey, "alchemy-key", "", "Alchemy API key for NFT discovery (optional, enables fast NFT discovery)")
+	pflag.StringVar(&subgraphURL, "subgraph-url", "", "The Graph subgraph endpoint URL (optional, for querying delegation data)")
 	pflag.IntVar(&numDelegates, "delegates", 1, "Number of random delegates to create")
 	pflag.IntVar(&collectionIdx, "collection", 0, "Collection index to use (default: 0)")
+	pflag.IntVar(&startTokenID, "start-token", 1, "Starting token ID for sequential mode (default: 1)")
 	pflag.IntVar(&maxTokenScan, "max-scan", 10000, "Maximum token ID to scan when discovering NFTs")
 	pflag.IntVar(&tokensPerTx, "tokens-per-tx", 10, "Number of tokens to delegate per transaction")
 	pflag.IntVar(&confirmations, "confirmations", 1, "Number of block confirmations to wait")
@@ -72,11 +76,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize random seed
-	rand.Seed(time.Now().UnixNano())
+	// Run the delegation process with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 
-	// Run the delegation process
-	if err := run(); err != nil {
+	if err := run(ctx); err != nil {
 		fmt.Printf("\n❌ Fatal error: %v\n", err)
 		os.Exit(1)
 	}
@@ -106,11 +110,27 @@ func validateFlags() error {
 	return nil
 }
 
-func run() error {
-	ctx := context.Background()
-
+func run(ctx context.Context) error {
 	fmt.Println("🔌 Connecting to Ethereum node...")
 	fmt.Printf("   RPC: %s\n", rpcEndpoint)
+
+	// Initialize subgraph client if URL provided
+	var sgClient *subgraph.Client
+	if subgraphURL != "" {
+		fmt.Println("🌐 Initializing subgraph client...")
+		fmt.Printf("   URL: %s\n", subgraphURL)
+		sgClient = subgraph.NewClient(subgraphURL)
+
+		// Test connection by fetching global stats
+		stats, err := sgClient.GetGlobalStats(ctx)
+		if err != nil {
+			fmt.Printf("   ⚠️  Warning: Failed to connect to subgraph: %v\n", err)
+			fmt.Println("   Continuing without subgraph data...")
+			sgClient = nil
+		} else if stats != nil {
+			fmt.Printf("   ✓ Subgraph connected: %s total delegations\n", stats.TotalDelegations)
+		}
+	}
 
 	// Connect to Ethereum client
 	client, err := ethclient.Dial(rpcEndpoint)
@@ -126,8 +146,9 @@ func run() error {
 	}
 	fmt.Printf("   ✓ Connected to chain ID: %s\n", chainID.String())
 
-	// Load private key
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	// Load private key (strip 0x prefix if present)
+	privateKeyClean := strings.TrimPrefix(privateKeyHex, "0x")
+	privateKey, err := crypto.HexToECDSA(privateKeyClean)
 	if err != nil {
 		return fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -157,7 +178,7 @@ func run() error {
 	fmt.Printf("   Contract: %s\n", contractAddr)
 
 	contractAddress := common.HexToAddress(contractAddr)
-	censusContract, err := census.NewDavinciDaoCensus(contractAddress, client)
+	censusContract, err := census.NewDavinciDao(contractAddress, client)
 	if err != nil {
 		return fmt.Errorf("failed to instantiate contract: %w", err)
 	}
@@ -167,7 +188,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to get census root (is this a valid DavinciDAO contract?): %w", err)
 	}
-	fmt.Printf("   ✓ Current census root: %s\n", censusRoot.String())
+	fmt.Printf("   ✓ Contract verified (census root: %s)\n", censusRoot.String())
 
 	// Discover undelegated NFTs
 	fmt.Println("\n🔍 Discovering NFTs...")
@@ -251,7 +272,7 @@ func run() error {
 	if !useAlchemy {
 		// No Alchemy key or Alchemy failed - use sequential IDs
 		fmt.Println("   ℹ️  No Alchemy API key provided - generating sequential token IDs")
-		fmt.Println("   ℹ️  Assuming you own tokens with IDs 0, 1, 2, ...")
+		fmt.Printf("   ℹ️  Assuming you own tokens starting from ID %d\n", startTokenID)
 
 		// Generate sequential token IDs
 		undelegatedNFTs = make([]*nft.TokenInfo, 0)
@@ -259,29 +280,28 @@ func run() error {
 		for i := 0; i < requiredNFTs; i++ {
 			undelegatedNFTs = append(undelegatedNFTs, &nft.TokenInfo{
 				CollectionIndex: big.NewInt(int64(collectionIdx)),
-				TokenID:         big.NewInt(int64(i)),
+				TokenID:         big.NewInt(int64(startTokenID + i)),
 			})
 		}
-		fmt.Printf("   ✓ Generated %d sequential token IDs (0-%d)\n", requiredNFTs, requiredNFTs-1)
+		fmt.Printf("   ✓ Generated %d sequential token IDs (%d-%d)\n", requiredNFTs, startTokenID, startTokenID+requiredNFTs-1)
 	}
 
 	// Generate random delegate addresses
 	fmt.Printf("\n🎲 Generating %d random delegate addresses...\n", numDelegates)
-	delegates := generateRandomAddresses(numDelegates)
+	delegates, err := generateRandomAddresses(numDelegates)
+	if err != nil {
+		return fmt.Errorf("failed to generate delegate addresses: %w", err)
+	}
 	for i, delegate := range delegates {
 		fmt.Printf("   Delegate %d: %s\n", i+1, delegate.Hex())
 	}
 
-	// Reconstruct merkle tree for proof generation
-	fmt.Println("\n🌳 Reconstructing Merkle tree...")
-	tree, err := merkle.ReconstructTree(ctx, censusContract, 10)
-	if err != nil {
-		return fmt.Errorf("failed to reconstruct tree: %w", err)
-	}
+	// On-chain Merkle tree handles proofs automatically
+	fmt.Println("\n✅ On-chain Merkle tree construction enabled!")
 
 	if dryRun {
 		fmt.Println("\n🔍 DRY RUN MODE - No transactions will be sent")
-		return simulateDelegations(delegates, undelegatedNFTs, tree)
+		return simulateDelegations(delegates, undelegatedNFTs)
 	}
 
 	// Execute delegations
@@ -295,11 +315,10 @@ func run() error {
 		fromAddress,
 		delegates,
 		undelegatedNFTs,
-		tree,
 	)
 }
 
-func simulateDelegations(delegates []common.Address, nfts []*nft.TokenInfo, tree *merkle.Tree) error {
+func simulateDelegations(delegates []common.Address, nfts []*nft.TokenInfo) error {
 	nftIndex := 0
 
 	for i, delegate := range delegates {
@@ -313,14 +332,6 @@ func simulateDelegations(delegates []common.Address, nfts []*nft.TokenInfo, tree
 		}
 
 		fmt.Printf("   Tokens to delegate: %v\n", tokenIDs(tokens))
-
-		// Generate proof
-		proof, err := tree.GenerateProof(delegate)
-		if err != nil {
-			return fmt.Errorf("failed to generate proof for %s: %w", delegate.Hex(), err)
-		}
-
-		fmt.Printf("   Proof siblings: %d\n", len(proof))
 		fmt.Printf("   ✓ Would delegate %d tokens to %s\n", len(tokens), delegate.Hex())
 	}
 
@@ -330,13 +341,12 @@ func simulateDelegations(delegates []common.Address, nfts []*nft.TokenInfo, tree
 func executeDelegations(
 	ctx context.Context,
 	client *ethclient.Client,
-	contract *census.DavinciDaoCensus,
+	contract *census.DavinciDao,
 	privateKey *ecdsa.PrivateKey,
 	chainID *big.Int,
 	fromAddress common.Address,
 	delegates []common.Address,
 	nfts []*nft.TokenInfo,
-	tree *merkle.Tree,
 ) error {
 	totalGasUsed := big.NewInt(0)
 	totalCostWei := big.NewInt(0)
@@ -365,13 +375,6 @@ func executeDelegations(
 
 		fmt.Printf("   Tokens: %v\n", tokenIDsToString(tokenIDs))
 
-		// Generate proof for the delegate
-		proof, err := tree.GenerateProof(delegate)
-		if err != nil {
-			return fmt.Errorf("failed to generate proof: %w", err)
-		}
-		fmt.Printf("   Proof size: %d siblings\n", len(proof))
-
 		// Prepare transaction
 		auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 		if err != nil {
@@ -396,18 +399,17 @@ func executeDelegations(
 		fmt.Printf("   Gas price: %s Gwei (multiplier: %.1fx)\n",
 			weiToGwei(auth.GasPrice), gasMultiplier)
 
-		// Empty fromProofs for first delegation (no inherited delegations)
-		emptyProofs := make([]census.DavinciDaoCensusProofInput, 0)
-
-		// Send delegation transaction
+		// Send delegation transaction (with empty proofs for new delegations)
 		fmt.Println("   ⏳ Sending transaction...")
+		emptyProof := make([]*big.Int, 0)
+		emptyFromProofs := make([]census.DavinciDaoProofInput, 0)
 		tx, err := contract.Delegate(
 			auth,
 			delegate,
 			big.NewInt(int64(collectionIdx)),
 			tokenIDs,
-			proof,
-			emptyProofs,
+			emptyProof,
+			emptyFromProofs,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to send delegation transaction: %w", err)
@@ -433,14 +435,7 @@ func executeDelegations(
 		fmt.Printf("   ⛽ Gas used: %s\n", formatWithCommas(gasUsed.Uint64()))
 		fmt.Printf("   💰 Cost: %s ETH\n", weiToEther(txCost))
 
-		// Update tree with new delegation
-		tree.Nodes = append(tree.Nodes, &merkle.TreeNode{
-			Index:   len(tree.Nodes),
-			Address: delegate,
-			Weight:  uint64(len(tokenIDs)),
-			Leaf:    merkle.PackLeaf(delegate, uint64(len(tokenIDs))),
-		})
-
+		// Tree updates automatically on-chain, tracked in subgraph
 		nonce++
 
 		// Small delay between transactions
@@ -494,15 +489,22 @@ func waitForConfirmations(
 	}
 }
 
-func generateRandomAddresses(count int) []common.Address {
+func generateRandomAddresses(count int) ([]common.Address, error) {
 	addresses := make([]common.Address, count)
 	for i := 0; i < count; i++ {
-		privateKey, _ := crypto.GenerateKey()
+		// Use crypto/rand for cryptographically secure randomness
+		privateKey, err := ecdsa.GenerateKey(crypto.S256(), crand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate key %d: %w", i, err)
+		}
 		publicKey := privateKey.Public()
-		publicKeyECDSA, _ := publicKey.(*ecdsa.PublicKey)
+		publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast public key %d to ECDSA", i)
+		}
 		addresses[i] = crypto.PubkeyToAddress(*publicKeyECDSA)
 	}
-	return addresses
+	return addresses, nil
 }
 
 func weiToEther(wei *big.Int) string {

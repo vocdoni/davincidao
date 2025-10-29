@@ -25,7 +25,7 @@ type Tree struct {
 }
 
 // ReconstructTree fetches the entire census tree from the contract
-func ReconstructTree(ctx context.Context, contract *census.DavinciDaoCensus, maxAttempts int) (*Tree, error) {
+func ReconstructTree(ctx context.Context, contract *census.DavinciDao, maxAttempts int) (*Tree, error) {
 	fmt.Println("📊 Reconstructing census tree from contract...")
 
 	tree := &Tree{

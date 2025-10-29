@@ -112,11 +112,40 @@ event CensusRootUpdated(uint256 newRoot);
 
 ## Development Setup
 
+### Quick Start with Makefile
+
+This project includes a comprehensive Makefile for easy development and deployment:
+
+```bash
+# Show all available commands
+make help
+
+# Check if all required tools are installed
+make check-tools
+
+# Install all dependencies (contract, subgraph, webapp)
+make install
+
+# Build contracts
+make build
+
+# Run tests
+make test
+
+# Deploy everything (test, deploy contract, configure webapp, prepare subgraph)
+make deploy-all
+```
+
+For detailed information about available scripts and deployment options, see [scripts/README.md](scripts/README.md).
+
 ### Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- [Node.js](https://nodejs.org/) (v16 or higher)
+- [pnpm](https://pnpm.io/)
+- [Graph CLI](https://thegraph.com/docs/en/developing/creating-a-subgraph/) (for subgraph deployment)
 
-### Installation
+### Manual Installation
 
 ```bash
 # Clone the repository
@@ -134,11 +163,38 @@ npm install
 ### Build & Testing
 
 ```bash
+# Using Makefile (recommended)
+make build
+make test
+
+# Or using Foundry directly
 forge build
 forge test
 ```
 
 ## Smart Contract Deployment
+
+### Using Makefile (Recommended)
+
+The easiest way to deploy is using the provided Makefile and scripts:
+
+```bash
+# Complete deployment pipeline (tests, deploys, configures everything)
+make deploy-all
+
+# Or deploy just the contract
+make deploy-contract
+
+# Update webapp configuration with deployed contract
+make update-webapp-env
+
+# Prepare subgraph for deployment
+make deploy-subgraph
+```
+
+See [scripts/README.md](scripts/README.md) for detailed information about deployment scripts.
+
+### Manual Deployment
 
 #### 1. Configure Your NFT Collections
 
@@ -155,9 +211,6 @@ standards[0] = DavinciDaoCensus.TokenStandard.ERC721;
 
 nftContracts[1] = 0x60E4d786628Fea6478F785A6d7e704777c86a7c6; // Mutant Ape Yacht Club (ERC-721)
 standards[1] = DavinciDaoCensus.TokenStandard.ERC721;
-
-nftContracts[2] = 0x495f947276749Ce646f68AC8c248420045cb7b5e; // OpenSea Shared Storefront (ERC-1155)
-standards[2] = DavinciDaoCensus.TokenStandard.ERC1155;
 ```
 
 **Note**: The deployment script includes the necessary imports:
@@ -241,24 +294,3 @@ cast call <DEPLOYED_CONTRACT_ADDRESS> "collections(uint256)" 0 --rpc-url $RPC_UR
 - `weightOf(account)` - Get voting weight of address
 - `tokenDelegate(key)` - Check delegation of specific token
 
-
-## Integration Examples
-
-### Frontend Integration
-
-```javascript
-// Check if user has delegated tokens
-const delegatedTokens = await contract.getNFTids(collectionIndex, userTokens);
-
-// Get current voting power
-const [weight, leaf] = await contract.getDelegations(userAddress);
-
-// Enumerate all participants
-const participants = [];
-for (let i = 0; i < treeSize; i++) {
-    const addr = await contract.getAccountAt(i);
-    if (addr !== '0x0000000000000000000000000000000000000000') {
-        participants.push(addr);
-    }
-}
-```
