@@ -6,7 +6,7 @@ import { ErrorBoundary } from '~/components/ErrorBoundary'
 import { useWallet } from '~/hooks/useWallet'
 import { DavinciDaoContract } from '~/lib/contract'
 import { CONTRACT_CONFIG } from '~/lib/constants'
-import { initSubgraphClient } from '~/lib/subgraph-client'
+import { initSubgraphClient, getSubgraphClient } from '~/lib/subgraph-client'
 import { formatNumber } from '~/lib/utils'
 import { Button } from '~/components/common/Button'
 import { ContractAddressInput } from '~/components/common/ContractAddressInput'
@@ -143,9 +143,15 @@ function DashboardContent() {
       const root = await contract.getCensusRoot()
       setCensusRoot(root.toString())
 
-      // Load user's voting weight
-      const weight = await contract.getWeightOf(address)
-      setUserWeight(weight)
+      // Load user's voting weight from subgraph (V2: weights are no longer stored on-chain)
+      try {
+        const subgraph = getSubgraphClient()
+        const weight = await subgraph.getAccountWeight(address)
+        setUserWeight(weight)
+      } catch (error) {
+        console.warn('Could not get weight from subgraph, defaulting to 0:', error)
+        setUserWeight(0)
+      }
 
       // Load collections information
       const collectionsData = await contract.getAllCollections()

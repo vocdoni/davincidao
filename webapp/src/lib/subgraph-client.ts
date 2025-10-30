@@ -11,6 +11,8 @@ interface SubgraphAccount {
   weight: string
   lastUpdatedAt: string
   lastUpdatedBlock: string
+  firstInsertedBlock: string
+  firstInsertedAt: string
 }
 
 interface SubgraphTokenDelegation {
@@ -111,6 +113,8 @@ export class SubgraphClient {
           weight
           lastUpdatedAt
           lastUpdatedBlock
+          firstInsertedBlock
+          firstInsertedAt
         }
       }
     `

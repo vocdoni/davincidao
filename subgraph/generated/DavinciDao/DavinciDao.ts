@@ -178,31 +178,6 @@ export class WeightChanged__Params {
   }
 }
 
-export class DavinciDao__getDelegationsResult {
-  value0: BigInt;
-  value1: BigInt;
-
-  constructor(value0: BigInt, value1: BigInt) {
-    this.value0 = value0;
-    this.value1 = value1;
-  }
-
-  toMap(): TypedMap<string, ethereum.Value> {
-    let map = new TypedMap<string, ethereum.Value>();
-    map.set("value0", ethereum.Value.fromUnsignedBigInt(this.value0));
-    map.set("value1", ethereum.Value.fromUnsignedBigInt(this.value1));
-    return map;
-  }
-
-  getWeight(): BigInt {
-    return this.value0;
-  }
-
-  getLeaf(): BigInt {
-    return this.value1;
-  }
-}
-
 export class DavinciDao extends ethereum.SmartContract {
   static bind(address: Address): DavinciDao {
     return new DavinciDao("DavinciDao", address);
@@ -229,19 +204,30 @@ export class DavinciDao extends ethereum.SmartContract {
     return ethereum.CallResult.fromValue(value[0].toAddress());
   }
 
-  computeLeaf(account: Address): BigInt {
-    let result = super.call("computeLeaf", "computeLeaf(address):(uint256)", [
-      ethereum.Value.fromAddress(account),
-    ]);
+  computeLeafWithWeight(account: Address, weight: BigInt): BigInt {
+    let result = super.call(
+      "computeLeafWithWeight",
+      "computeLeafWithWeight(address,uint88):(uint256)",
+      [
+        ethereum.Value.fromAddress(account),
+        ethereum.Value.fromUnsignedBigInt(weight),
+      ],
+    );
 
     return result[0].toBigInt();
   }
 
-  try_computeLeaf(account: Address): ethereum.CallResult<BigInt> {
+  try_computeLeafWithWeight(
+    account: Address,
+    weight: BigInt,
+  ): ethereum.CallResult<BigInt> {
     let result = super.tryCall(
-      "computeLeaf",
-      "computeLeaf(address):(uint256)",
-      [ethereum.Value.fromAddress(account)],
+      "computeLeafWithWeight",
+      "computeLeafWithWeight(address,uint88):(uint256)",
+      [
+        ethereum.Value.fromAddress(account),
+        ethereum.Value.fromUnsignedBigInt(weight),
+      ],
     );
     if (result.reverted) {
       return new ethereum.CallResult();
@@ -267,39 +253,6 @@ export class DavinciDao extends ethereum.SmartContract {
     }
     let value = result.value;
     return ethereum.CallResult.fromValue(value[0].toBigInt());
-  }
-
-  getDelegations(account: Address): DavinciDao__getDelegationsResult {
-    let result = super.call(
-      "getDelegations",
-      "getDelegations(address):(uint88,uint256)",
-      [ethereum.Value.fromAddress(account)],
-    );
-
-    return new DavinciDao__getDelegationsResult(
-      result[0].toBigInt(),
-      result[1].toBigInt(),
-    );
-  }
-
-  try_getDelegations(
-    account: Address,
-  ): ethereum.CallResult<DavinciDao__getDelegationsResult> {
-    let result = super.tryCall(
-      "getDelegations",
-      "getDelegations(address):(uint88,uint256)",
-      [ethereum.Value.fromAddress(account)],
-    );
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(
-      new DavinciDao__getDelegationsResult(
-        value[0].toBigInt(),
-        value[1].toBigInt(),
-      ),
-    );
   }
 
   getNFTids(nftIndex: BigInt, candidateIds: Array<BigInt>): Array<BigInt> {
@@ -389,29 +342,6 @@ export class DavinciDao extends ethereum.SmartContract {
     return ethereum.CallResult.fromValue(value[0].toAddressArray());
   }
 
-  rootBlockNumbers(param0: BigInt): BigInt {
-    let result = super.call(
-      "rootBlockNumbers",
-      "rootBlockNumbers(uint256):(uint256)",
-      [ethereum.Value.fromUnsignedBigInt(param0)],
-    );
-
-    return result[0].toBigInt();
-  }
-
-  try_rootBlockNumbers(param0: BigInt): ethereum.CallResult<BigInt> {
-    let result = super.tryCall(
-      "rootBlockNumbers",
-      "rootBlockNumbers(uint256):(uint256)",
-      [ethereum.Value.fromUnsignedBigInt(param0)],
-    );
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toBigInt());
-  }
-
   tokenDelegate(param0: Bytes): Address {
     let result = super.call(
       "tokenDelegate",
@@ -433,25 +363,6 @@ export class DavinciDao extends ethereum.SmartContract {
     }
     let value = result.value;
     return ethereum.CallResult.fromValue(value[0].toAddress());
-  }
-
-  weightOf(param0: Address): BigInt {
-    let result = super.call("weightOf", "weightOf(address):(uint88)", [
-      ethereum.Value.fromAddress(param0),
-    ]);
-
-    return result[0].toBigInt();
-  }
-
-  try_weightOf(param0: Address): ethereum.CallResult<BigInt> {
-    let result = super.tryCall("weightOf", "weightOf(address):(uint88)", [
-      ethereum.Value.fromAddress(param0),
-    ]);
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toBigInt());
   }
 }
 
@@ -514,12 +425,16 @@ export class DelegateCall__Inputs {
     return this._call.inputValues[2].value.toBigIntArray();
   }
 
+  get currentWeightOfTo(): BigInt {
+    return this._call.inputValues[3].value.toBigInt();
+  }
+
   get toProof(): Array<BigInt> {
-    return this._call.inputValues[3].value.toBigIntArray();
+    return this._call.inputValues[4].value.toBigIntArray();
   }
 
   get fromProofs(): Array<DelegateCallFromProofsStruct> {
-    return this._call.inputValues[4].value.toTupleArray<DelegateCallFromProofsStruct>();
+    return this._call.inputValues[5].value.toTupleArray<DelegateCallFromProofsStruct>();
   }
 }
 
@@ -536,8 +451,12 @@ export class DelegateCallFromProofsStruct extends ethereum.Tuple {
     return this[0].toAddress();
   }
 
+  get currentWeight(): BigInt {
+    return this[1].toBigInt();
+  }
+
   get siblings(): Array<BigInt> {
-    return this[1].toBigIntArray();
+    return this[2].toBigIntArray();
   }
 }
 
@@ -584,8 +503,12 @@ export class UndelegateCallProofsStruct extends ethereum.Tuple {
     return this[0].toAddress();
   }
 
+  get currentWeight(): BigInt {
+    return this[1].toBigInt();
+  }
+
   get siblings(): Array<BigInt> {
-    return this[1].toBigIntArray();
+    return this[2].toBigIntArray();
   }
 }
 
@@ -618,12 +541,16 @@ export class UpdateDelegationCall__Inputs {
     return this._call.inputValues[2].value.toBigIntArray();
   }
 
+  get currentWeightOfTo(): BigInt {
+    return this._call.inputValues[3].value.toBigInt();
+  }
+
   get fromProofs(): Array<UpdateDelegationCallFromProofsStruct> {
-    return this._call.inputValues[3].value.toTupleArray<UpdateDelegationCallFromProofsStruct>();
+    return this._call.inputValues[4].value.toTupleArray<UpdateDelegationCallFromProofsStruct>();
   }
 
   get toProof(): Array<BigInt> {
-    return this._call.inputValues[4].value.toBigIntArray();
+    return this._call.inputValues[5].value.toBigIntArray();
   }
 }
 
@@ -640,7 +567,11 @@ export class UpdateDelegationCallFromProofsStruct extends ethereum.Tuple {
     return this[0].toAddress();
   }
 
+  get currentWeight(): BigInt {
+    return this[1].toBigInt();
+  }
+
   get siblings(): Array<BigInt> {
-    return this[1].toBigIntArray();
+    return this[2].toBigIntArray();
   }
 }

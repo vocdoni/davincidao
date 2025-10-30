@@ -24,6 +24,9 @@ function loadOrCreateAccount(address: Bytes, timestamp: BigInt, blockNumber: Big
     account.weight = BigInt.fromI32(0)
     account.lastUpdatedAt = timestamp
     account.lastUpdatedBlock = blockNumber
+    // Will be set when weight first becomes > 0
+    account.firstInsertedBlock = BigInt.fromI32(0)
+    account.firstInsertedAt = BigInt.fromI32(0)
     account.save()
 
     // Update global stats - new account
@@ -130,9 +133,17 @@ export function handleDelegated(event: DelegatedEvent): void {
   }
 
   // Increase new delegate's weight
+  let oldWeight = delegateAccount.weight
   delegateAccount.weight = delegateAccount.weight.plus(BigInt.fromI32(1))
   delegateAccount.lastUpdatedAt = event.block.timestamp
   delegateAccount.lastUpdatedBlock = event.block.number
+
+  // Track first insertion into tree (when weight goes from 0 to > 0)
+  if (oldWeight.equals(BigInt.fromI32(0))) {
+    delegateAccount.firstInsertedBlock = event.block.number
+    delegateAccount.firstInsertedAt = event.block.timestamp
+  }
+
   delegateAccount.save()
 
   // Update global stats
@@ -278,9 +289,17 @@ export function handleDelegatedBatch(event: DelegatedBatchEvent): void {
   }
 
   // Update new delegate's weight once for all tokens
+  let oldWeight = delegateAccount.weight
   delegateAccount.weight = delegateAccount.weight.plus(BigInt.fromI32(tokenIds.length))
   delegateAccount.lastUpdatedAt = event.block.timestamp
   delegateAccount.lastUpdatedBlock = event.block.number
+
+  // Track first insertion into tree (when weight goes from 0 to > 0)
+  if (oldWeight.equals(BigInt.fromI32(0))) {
+    delegateAccount.firstInsertedBlock = event.block.number
+    delegateAccount.firstInsertedAt = event.block.timestamp
+  }
+
   delegateAccount.save()
 
   // Update global stats

@@ -45,7 +45,7 @@ export function getAlchemyNetwork(chainId: number): Network | null {
   return ALCHEMY_NETWORKS[chainId] || null
 }
 
-// DavinciDAO Census Contract ABI (Proof-based Lean-IMT implementation)
+// DavinciDAO Census Contract ABI (Proof-based Lean-IMT implementation - V2)
 export const DAVINCI_DAO_ABI = [
   // View functions
   'function getCensusRoot() external view returns (uint256)',
@@ -54,16 +54,14 @@ export const DAVINCI_DAO_ABI = [
   'function tokenDelegate(bytes32 key) external view returns (address)',
   'function collections(uint256 index) external view returns (address token)',
   'function getTokenDelegations(uint256 nftIndex, uint256[] calldata tokenIds) external view returns (address[] memory)',
-  'function weightOf(address account) external view returns (uint88)',
-  'function getDelegations(address account) external view returns (uint88 weight, uint256 leaf)',
   'function getAccountAt(uint256 index) external view returns (address)',
   'function indexAccount(uint256 index) external view returns (address)',
-  'function computeLeaf(address account) external view returns (uint256)',
-  'function owner() external view returns (address)',
+  'function computeLeafWithWeight(address account, uint88 weight) external pure returns (uint256)',
 
   // Mutating functions (REQUIRES MERKLE PROOFS!)
-  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint256[] calldata toProof, tuple(address account, uint256[] siblings)[] calldata fromProofs) external',
-  'function undelegate(uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint256[] siblings)[] calldata proofs) external',
+  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint88 currentWeightOfTo, uint256[] calldata toProof, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata fromProofs) external',
+  'function undelegate(uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata proofs) external',
+  'function updateDelegation(address newDelegate, uint256 nftIndex, uint256[] calldata ids, uint88 currentWeightOfTo, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata fromProofs, uint256[] calldata toProof) external',
   'function updateCensusRoot(uint256 newRoot) external', // Owner only
 
   // Events

@@ -406,16 +406,21 @@ export class DavinciDaoContract {
   }
 
   /**
-   * Get user's current weight and leaf
+   * Get user's current weight and leaf (V2: weight from subgraph, leaf computed)
    */
   async getDelegations(address: string): Promise<DelegationInfo> {
     try {
-      const [weight, leaf] = await RateLimitHandler.executeWithRetry(async () => {
-        return await this.contract.getDelegations(address)
+      // Get weight from subgraph
+      const weight = await this.getWeightOf(address)
+
+      // Compute leaf using contract function (leaf = (address << 88) | weight)
+      const leaf = await RateLimitHandler.executeWithRetry(async () => {
+        return await this.contract.computeLeafWithWeight(address, weight)
       })
+
       return {
         address,
-        weight: Number(weight),
+        weight,
         leaf: leaf.toString()
       }
     } catch (error: unknown) {
@@ -425,16 +430,15 @@ export class DavinciDaoContract {
   }
 
   /**
-   * Get user's weight
+   * Get user's weight (V2: from subgraph, not contract storage)
    */
   async getWeightOf(address: string): Promise<number> {
     try {
-      const weight = await RateLimitHandler.executeWithRetry(async () => {
-        return await this.contract.weightOf(address)
-      })
-      return Number(weight)
+      const subgraph = getSubgraphClient()
+      const weight = await subgraph.getAccountWeight(address)
+      return weight
     } catch (error: unknown) {
-      console.error('Failed to get weight:', error)
+      console.error('Failed to get weight from subgraph:', error)
       return 0
     }
   }
@@ -776,17 +780,28 @@ export class DavinciDaoContract {
    * @param fromProofs - Proofs for clearing inherited delegations (empty if no inherited delegations)
    */
   async delegate(
-    to: string, 
-    collectionIndex: number, 
-    tokenIds: string[] | number[], 
+    to: string,
+    collectionIndex: number,
+    tokenIds: string[] | number[],
     proof: string[] = [],
     fromProofs: ProofInput[] = []
   ): Promise<string> {
     try {
       const signerContract = await this.getSignerContract()
+
+      // Query delegate's current weight from subgraph
+      let currentWeight = 0
+      try {
+        const subgraph = getSubgraphClient()
+        currentWeight = await subgraph.getAccountWeight(to)
+        console.log(`Delegate ${to} current weight: ${currentWeight}`)
+      } catch (error) {
+        console.warn('Could not get weight from subgraph, using 0:', error)
+      }
+
       // Convert tokenIds to numbers if they're strings
       const tokenIdsAsNumbers = tokenIds.map(id => typeof id === 'string' ? parseInt(id, 10) : id)
-      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, proof, fromProofs)
+      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, currentWeight, proof, fromProofs)
       return tx.hash
     } catch (error: unknown) {
       console.error('Delegation failed:', error)
@@ -826,11 +841,23 @@ export class DavinciDaoContract {
   ): Promise<string> {
     try {
       const signerContract = await this.getSignerContract()
+
+      // Query new delegate's current weight from subgraph
+      let currentWeight = 0
+      try {
+        const subgraph = getSubgraphClient()
+        currentWeight = await subgraph.getAccountWeight(newDelegate)
+        console.log(`New delegate ${newDelegate} current weight: ${currentWeight}`)
+      } catch (error) {
+        console.warn('Could not get weight from subgraph, using 0:', error)
+      }
+
       const tx = await signerContract.updateDelegation(
-        newDelegate, 
-        collectionIndex, 
-        tokenIds, 
-        fromProofs, 
+        newDelegate,
+        collectionIndex,
+        tokenIds,
+        currentWeight,
+        fromProofs,
         toProof
       )
       return tx.hash

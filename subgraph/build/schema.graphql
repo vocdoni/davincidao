@@ -5,6 +5,8 @@ type Account @entity(immutable: false) {
   weight: BigInt!                      # current weight (number of delegated NFTs)
   lastUpdatedAt: BigInt!               # timestamp
   lastUpdatedBlock: BigInt!            # block number
+  firstInsertedBlock: BigInt!          # block when first inserted into tree (weight went from 0 to >0)
+  firstInsertedAt: BigInt!             # timestamp when first inserted
   receivedDelegations: [TokenDelegation!]! @derivedFrom(field: "delegateAccount")
 }
 

@@ -103,6 +103,32 @@ export class Account extends Entity {
     this.set("lastUpdatedBlock", Value.fromBigInt(value));
   }
 
+  get firstInsertedBlock(): BigInt {
+    let value = this.get("firstInsertedBlock");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set firstInsertedBlock(value: BigInt) {
+    this.set("firstInsertedBlock", Value.fromBigInt(value));
+  }
+
+  get firstInsertedAt(): BigInt {
+    let value = this.get("firstInsertedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set firstInsertedAt(value: BigInt) {
+    this.set("firstInsertedAt", Value.fromBigInt(value));
+  }
+
   get receivedDelegations(): TokenDelegationLoader {
     return new TokenDelegationLoader(
       "Account",

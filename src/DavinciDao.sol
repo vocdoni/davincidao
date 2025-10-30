@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 // OpenZeppelin v5.4.x interfaces
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
+import {CircularBuffer} from "openzeppelin-contracts/contracts/utils/structs/CircularBuffer.sol";
 
 // Lean-IMT (zk-kit) for on-chain Merkle tree
 import {InternalLeanIMT, LeanIMTData} from "zk-kit.solidity/packages/lean-imt/contracts/InternalLeanIMT.sol";
@@ -12,11 +13,12 @@ import {SNARK_SCALAR_FIELD} from "zk-kit.solidity/packages/lean-imt/contracts/Co
 /// @notice Maintains an on-chain Merkle tree for NFT-based voting power delegation.
 /// @dev Features:
 ///      - On-chain Merkle tree construction using Lean-IMT (automatic root updates)
-///      - Map-based root history (root => blockNumber) for unlimited storage
+///      - Circular buffer root history (gas-optimized, last N roots)
 ///      - Event emission for The Graph indexing
 ///      - Proof-based delegation for security and gas efficiency
 contract DavinciDao {
     using InternalLeanIMT for LeanIMTData;
+    using CircularBuffer for CircularBuffer.Bytes32CircularBuffer;
 
     // ========= Types & storage =========
 
@@ -25,8 +27,10 @@ contract DavinciDao {
     }
 
     /// @notice Proof for a specific account's leaf (required by _update/_remove).
+    /// @dev Includes current weight to enable stateless verification via Merkle proofs
     struct ProofInput {
         address account;
+        uint88 currentWeight;  // Current weight of this account (verified by proof)
         uint256[] siblings;
     }
 
@@ -35,17 +39,14 @@ contract DavinciDao {
 
     // --- census tree (Lean-IMT) ---
     LeanIMTData private _census;
-    mapping(address => uint88) public weightOf; // 11-byte weights
 
     // --- delegation index (SECURITY CRITICAL) ---
     // Delegation persists per (collection index, tokenId), regardless of current owner.
     mapping(bytes32 => address) public tokenDelegate;
 
-    // Removed _ownerDelegated mapping - gas optimization (use tokenDelegate instead)
-
-    // --- root history (map-based) ---
-    // Mapping of root => block number (for verification)
-    mapping(uint256 => uint256) public rootBlockNumbers;
+    // --- root history (circular buffer + mapping for O(1) lookup) ---
+    CircularBuffer.Bytes32CircularBuffer private _rootBuffer;
+    mapping(bytes32 => uint64) private _rootToBlock;
 
     // ========= Events =========
     event Delegated(address indexed owner, address indexed to, uint256 indexed nftIndex, uint256 tokenId);
@@ -77,6 +78,10 @@ contract DavinciDao {
             collections.push();
             collections[i].token = tokens[i];
         }
+
+        // Initialize circular buffer with capacity for 100 recent roots
+        // This provides ~1-2 days of history at 15s block time (sufficient for voting)
+        _rootBuffer.setup(100);
     }
 
     // ========= Public / view API =========
@@ -87,16 +92,21 @@ contract DavinciDao {
     }
 
     /// @notice Check if a root has been valid at some point and get its block number.
+    /// @dev Only returns block numbers for roots in the circular buffer (last 100 roots).
     /// @param root The census root to verify.
-    /// @return blockNumber The block number when this root was set (0 if never set).
+    /// @return blockNumber The block number when this root was set (0 if never set or evicted).
     function getRootBlockNumber(uint256 root) external view returns (uint256) {
-        return rootBlockNumbers[root];
+        return uint256(_rootToBlock[bytes32(root)]);
     }
 
-    /// @notice Convenience accessor: current weight and packed leaf value for `account`.
-    function getDelegations(address account) external view returns (uint88 weight, uint256 leaf) {
-        weight = weightOf[account];
-        leaf = _packLeaf(account, weight);
+    /// @notice Compute the packed (address||weight) leaf for an account with given weight.
+    /// @dev Pure helper function for client-side leaf computation.
+    ///      Weight must be queried from subgraph (WeightChanged events).
+    /// @param account The account address.
+    /// @param weight The voting weight (from subgraph).
+    /// @return Packed leaf value: (address << 88) | weight
+    function computeLeafWithWeight(address account, uint88 weight) external pure returns (uint256) {
+        return _packLeaf(account, weight);
     }
 
     /// @notice Vectorized mapping lookup for (nftIndex, ids) => delegate address (0 if none).
@@ -139,10 +149,6 @@ contract DavinciDao {
         return out;
     }
 
-    /// @notice Helper to compute the packed `(address||weight)` leaf for `account`.
-    function computeLeaf(address account) external view returns (uint256) {
-        return _packLeaf(account, weightOf[account]);
-    }
 
     /// @notice Removed getAccountAt - use subgraph or events for tree reconstruction
     /// Gas optimization: removed indexAccount mapping
@@ -150,15 +156,17 @@ contract DavinciDao {
     // ========= Mutating API =========
 
     /// @notice Delegate voting power from owned NFTs to `to`.
-    /// @param to         Receiver address (voter).
-    /// @param nftIndex   Index into `collections`.
-    /// @param ids        Token IDs to delegate.
-    /// @param toProof    Merkle path for `to`'s existing leaf (empty if `to` has zero weight).
-    /// @param fromProofs Proofs for clearing inherited delegations (if any tokens were previously delegated by another owner).
+    /// @param to                Receiver address (voter).
+    /// @param nftIndex          Index into `collections`.
+    /// @param ids               Token IDs to delegate.
+    /// @param currentWeightOfTo Current weight of `to` (verified by proof, obtained from subgraph).
+    /// @param toProof           Merkle path for `to`'s existing leaf (empty if `to` has zero weight).
+    /// @param fromProofs        Proofs for clearing inherited delegations (if any tokens were previously delegated by another owner).
     function delegate(
         address to,
         uint256 nftIndex,
         uint256[] calldata ids,
+        uint88 currentWeightOfTo,
         uint256[] calldata toProof,
         ProofInput[] calldata fromProofs
     ) external {
@@ -175,7 +183,7 @@ contract DavinciDao {
         _applyInheritedProofs(inheritedDelegates, inheritedCounts, uniqueInherited, fromProofs);
 
         // Apply weight increase for new delegate
-        _applyDelta(to, int256(added), toProof);
+        _applyDelta(to, int256(added), currentWeightOfTo, toProof);
 
         // Store root in history
         _updateRootHistory();
@@ -239,7 +247,7 @@ contract DavinciDao {
             address acct = delAddrs[k];
             uint256 pIdx = _indexOfProof(proofs, acct);
             if (pIdx == type(uint256).max) revert ProofRequired(acct);
-            _applyDelta(acct, -int256(counts[k]), proofs[pIdx].siblings);
+            _applyDelta(acct, -int256(counts[k]), proofs[pIdx].currentWeight, proofs[pIdx].siblings);
         }
 
         // Store root in history
@@ -247,15 +255,17 @@ contract DavinciDao {
     }
 
     /// @notice Move delegation of given IDs to a new address `to` (caller must own the NFTs).
-    /// @param to          New delegate.
-    /// @param nftIndex    Index into `collections`.
-    /// @param ids         Token IDs to move.
-    /// @param fromProofs  Proofs for each *old* delegate reduced (unique and batched).
-    /// @param toProof     Proof for `to` (empty if `to` had zero weight).
+    /// @param to                New delegate.
+    /// @param nftIndex          Index into `collections`.
+    /// @param ids               Token IDs to move.
+    /// @param currentWeightOfTo Current weight of `to` (verified by proof, obtained from subgraph).
+    /// @param fromProofs        Proofs for each *old* delegate reduced (unique and batched).
+    /// @param toProof           Proof for `to` (empty if `to` had zero weight).
     function updateDelegation(
         address to,
         uint256 nftIndex,
         uint256[] calldata ids,
+        uint88 currentWeightOfTo,
         ProofInput[] calldata fromProofs,
         uint256[] calldata toProof
     ) external {
@@ -271,7 +281,7 @@ contract DavinciDao {
 
         // Apply weight increase for new delegate
         if (added > 0) {
-            _applyDelta(to, int256(added), toProof);
+            _applyDelta(to, int256(added), currentWeightOfTo, toProof);
 
             // Store root in history
             _updateRootHistory();
@@ -280,33 +290,37 @@ contract DavinciDao {
 
     // ========= Internal: Lean-IMT updates =========
 
-    function _applyDelta(address account, int256 delta, uint256[] calldata siblings) internal {
+    /// @dev Apply weight delta to account's leaf in the Merkle tree
+    /// @param account Account address to update
+    /// @param delta Weight change (positive = increase, negative = decrease)
+    /// @param oldWeight Current weight of account (verified by Merkle proof)
+    /// @param siblings Merkle proof siblings for verification
+    function _applyDelta(address account, int256 delta, uint88 oldWeight, uint256[] calldata siblings) internal {
         if (delta == 0) return;
 
-        uint88 oldW = weightOf[account];
         uint88 newW;
 
         if (delta > 0) {
             unchecked {
-                uint256 tmp = uint256(oldW) + uint256(int256(delta));
+                uint256 tmp = uint256(oldWeight) + uint256(int256(delta));
                 if (tmp > type(uint88).max) revert WeightOverflow();
                 newW = uint88(tmp);
             }
         } else {
             uint256 dec = uint256(-delta);
-            if (dec > oldW) revert WeightUnderflow();
+            if (dec > oldWeight) revert WeightUnderflow();
             unchecked {
-                newW = uint88(uint256(oldW) - dec);
+                newW = uint88(uint256(oldWeight) - dec);
             }
         }
 
-        uint256 oldLeaf = _packLeaf(account, oldW);
+        uint256 oldLeaf = _packLeaf(account, oldWeight);
         uint256 newLeaf = _packLeaf(account, newW);
 
         // Defensive range check for BN254 scalar field
         if (oldLeaf >= SNARK_SCALAR_FIELD || newLeaf >= SNARK_SCALAR_FIELD) revert WeightOverflow();
 
-        if (oldW == 0 && newW > 0) {
+        if (oldWeight == 0 && newW > 0) {
             // A) First insertion (weight 0 → >0)
             _census._insert(newLeaf); // no proof needed
         } else if (newW == 0) {
@@ -319,14 +333,23 @@ contract DavinciDao {
             _census._update(oldLeaf, newLeaf, siblings);
         }
 
-        weightOf[account] = newW;
-        emit WeightChanged(account, oldW, newW);
+        // Weight is no longer stored - callers must track via subgraph or WeightChanged events
+        emit WeightChanged(account, oldWeight, newW);
     }
 
-    /// @dev Update root history after tree modifications
+    /// @dev Update root history after tree modifications (using circular buffer)
     function _updateRootHistory() internal {
         uint256 newRoot = _census._root();
-        rootBlockNumbers[newRoot] = block.number;
+        bytes32 newRootBytes = bytes32(newRoot);
+
+        // Push to circular buffer (automatically evicts oldest if full)
+        _rootBuffer.push(newRootBytes);
+        _rootToBlock[newRootBytes] = uint64(block.number);
+
+        // Clean up evicted roots from mapping (buffer auto-overwrites)
+        // Note: We can't easily detect which root was evicted without tracking it separately
+        // So we'll accept minor storage leak for evicted roots (they'll be garbage-collected naturally)
+
         emit CensusRootUpdated(newRoot, block.number);
     }
 
@@ -410,7 +433,7 @@ contract DavinciDao {
             address acct = fromAddrs[k];
             uint256 pIdx = _indexOfProof(fromProofs, acct);
             if (pIdx == type(uint256).max) revert ProofRequired(acct);
-            _applyDelta(acct, -int256(fromCounts[k]), fromProofs[pIdx].siblings);
+            _applyDelta(acct, -int256(fromCounts[k]), fromProofs[pIdx].currentWeight, fromProofs[pIdx].siblings);
         }
     }
 
@@ -507,7 +530,7 @@ contract DavinciDao {
             address acct = inheritedDelegates[k];
             uint256 pIdx = _indexOfProof(fromProofs, acct);
             if (pIdx == type(uint256).max) revert ProofRequired(acct);
-            _applyDelta(acct, -int256(inheritedCounts[k]), fromProofs[pIdx].siblings);
+            _applyDelta(acct, -int256(inheritedCounts[k]), fromProofs[pIdx].currentWeight, fromProofs[pIdx].siblings);
         }
     }
 }

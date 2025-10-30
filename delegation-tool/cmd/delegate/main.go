@@ -52,7 +52,7 @@ func init() {
 	pflag.StringVar(&rpcEndpoint, "rpc", "", "Ethereum RPC endpoint (required)")
 	pflag.StringVar(&privateKeyHex, "private-key", "", "Private key for signing transactions (required)")
 	pflag.StringVar(&alchemyAPIKey, "alchemy-key", "", "Alchemy API key for NFT discovery (optional, enables fast NFT discovery)")
-	pflag.StringVar(&subgraphURL, "subgraph-url", "", "The Graph subgraph endpoint URL (optional, for querying delegation data)")
+	pflag.StringVar(&subgraphURL, "subgraph-url", "", "The Graph subgraph endpoint URL (required for V2 contract)")
 	pflag.IntVar(&numDelegates, "delegates", 1, "Number of random delegates to create")
 	pflag.IntVar(&collectionIdx, "collection", 0, "Collection index to use (default: 0)")
 	pflag.IntVar(&startTokenID, "start-token", 1, "Starting token ID for sequential mode (default: 1)")
@@ -101,6 +101,9 @@ func validateFlags() error {
 	if privateKeyHex == "" {
 		return fmt.Errorf("--private-key is required")
 	}
+	if subgraphURL == "" {
+		return fmt.Errorf("--subgraph-url is required (V2 contract requires subgraph for weight queries)")
+	}
 	if numDelegates < 1 {
 		return fmt.Errorf("--delegates must be at least 1")
 	}
@@ -114,22 +117,19 @@ func run(ctx context.Context) error {
 	fmt.Println("🔌 Connecting to Ethereum node...")
 	fmt.Printf("   RPC: %s\n", rpcEndpoint)
 
-	// Initialize subgraph client if URL provided
-	var sgClient *subgraph.Client
-	if subgraphURL != "" {
-		fmt.Println("🌐 Initializing subgraph client...")
-		fmt.Printf("   URL: %s\n", subgraphURL)
-		sgClient = subgraph.NewClient(subgraphURL)
+	// Initialize subgraph client (required for V2)
+	fmt.Println("🌐 Initializing subgraph client...")
+	fmt.Printf("   URL: %s\n", subgraphURL)
+	sgClient := subgraph.NewClient(subgraphURL)
 
-		// Test connection by fetching global stats
-		stats, err := sgClient.GetGlobalStats(ctx)
-		if err != nil {
-			fmt.Printf("   ⚠️  Warning: Failed to connect to subgraph: %v\n", err)
-			fmt.Println("   Continuing without subgraph data...")
-			sgClient = nil
-		} else if stats != nil {
-			fmt.Printf("   ✓ Subgraph connected: %s total delegations\n", stats.TotalDelegations)
-		}
+	// Test connection by fetching global stats
+	stats, err := sgClient.GetGlobalStats(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to connect to subgraph (required for V2): %w", err)
+	}
+	if stats != nil {
+		fmt.Printf("   ✓ Subgraph connected: %s total delegations, %s accounts\n",
+			stats.TotalDelegations, stats.TotalAccounts)
 	}
 
 	// Connect to Ethereum client
@@ -315,6 +315,7 @@ func run(ctx context.Context) error {
 		fromAddress,
 		delegates,
 		undelegatedNFTs,
+		sgClient,
 	)
 }
 
@@ -347,6 +348,7 @@ func executeDelegations(
 	fromAddress common.Address,
 	delegates []common.Address,
 	nfts []*nft.TokenInfo,
+	sgClient *subgraph.Client,
 ) error {
 	totalGasUsed := big.NewInt(0)
 	totalCostWei := big.NewInt(0)
@@ -399,6 +401,21 @@ func executeDelegations(
 		fmt.Printf("   Gas price: %s Gwei (multiplier: %.1fx)\n",
 			weiToGwei(auth.GasPrice), gasMultiplier)
 
+		// Query delegate's current weight from subgraph (required for V2)
+		account, err := sgClient.GetAccount(ctx, delegate)
+		if err != nil {
+			return fmt.Errorf("failed to query delegate weight from subgraph: %w", err)
+		}
+
+		var currentWeight uint64 = 0
+		if account != nil {
+			// Parse weight from string
+			fmt.Sscanf(account.Weight, "%d", &currentWeight)
+			fmt.Printf("   ℹ️  Delegate current weight: %d\n", currentWeight)
+		} else {
+			fmt.Println("   ℹ️  Delegate current weight: 0 (new delegate)")
+		}
+
 		// Send delegation transaction (with empty proofs for new delegations)
 		fmt.Println("   ⏳ Sending transaction...")
 		emptyProof := make([]*big.Int, 0)
@@ -408,6 +425,7 @@ func executeDelegations(
 			delegate,
 			big.NewInt(int64(collectionIdx)),
 			tokenIDs,
+			big.NewInt(int64(currentWeight)), // Pass current weight for V2 contract
 			emptyProof,
 			emptyFromProofs,
 		)

@@ -1,14 +1,85 @@
 import { useState, useCallback, useMemo } from 'react'
 import { DavinciDaoContract } from '~/lib/contract'
-import { MerkleTreeReconstructor, generateProofs } from '~/lib/merkle'
-import { NFTInfo } from '~/types'
-import { 
-  DelegateInfo, 
-  DelegationState, 
+import { generateProofs, packLeaf } from '~/lib/merkle'
+import { NFTInfo, CensusData, MerkleTreeNode } from '~/types'
+import {
+  DelegateInfo,
+  DelegationState,
   TransactionPlan,
   DelegationOperation,
   ProofRequirement
 } from '~/types/delegation'
+import { getSubgraphClient } from '~/lib/subgraph-client'
+
+/**
+ * Fetch census data from subgraph by querying WeightChanged events in chronological order
+ * This ensures we rebuild the tree in the same order as the contract built it
+ */
+async function fetchCensusDataFromSubgraph(contract: DavinciDaoContract): Promise<CensusData> {
+  console.log('Fetching census data from subgraph by replaying WeightChanged events...')
+  const subgraph = getSubgraphClient()
+
+  let skip = 0
+  const pageSize = 100
+
+  // Query all accounts that have current weight > 0
+  // The subgraph now tracks firstInsertedBlock for correct tree order
+  const allAccounts: Array<{ id: string; address: string; weight: string; firstInsertedBlock: string }> = []
+
+  while (true) {
+    const accounts = await subgraph.getAllAccounts(pageSize, skip)
+
+    if (!accounts || accounts.length === 0) {
+      break
+    }
+
+    allAccounts.push(...accounts)
+    skip += pageSize
+
+    if (accounts.length < pageSize) {
+      break
+    }
+  }
+
+  console.log(`Fetched ${allAccounts.length} accounts from subgraph`)
+
+  // Sort by firstInsertedBlock to match contract tree insertion order
+  // This is the block when each account first got weight > 0
+  allAccounts.sort((a, b) => {
+    const blockA = parseInt(a.firstInsertedBlock)
+    const blockB = parseInt(b.firstInsertedBlock)
+    if (blockA !== blockB) {
+      return blockA - blockB
+    }
+    // If same block, sort by address for determinism
+    return a.id.localeCompare(b.id)
+  })
+
+  // Convert accounts to MerkleTreeNode format with index in insertion order
+  const nodes: MerkleTreeNode[] = allAccounts.map((account, index) => {
+    const address = account.id
+    const weight = parseInt(account.weight)
+    const leaf = packLeaf(address, weight)
+
+    return {
+      index,
+      address,
+      weight,
+      leaf
+    }
+  })
+
+  console.log('Tree node order (first 10):', nodes.slice(0, 10).map(n => n.address))
+
+  // Get current census root
+  const root = await contract.getCensusRoot()
+
+  return {
+    root: root.toString(),
+    nodes,
+    totalParticipants: nodes.length
+  }
+}
 
 export const useDelegation = (
   contract: DavinciDaoContract | null,
@@ -329,22 +400,12 @@ export const useDelegation = (
     setError(null)
 
     try {
-      const reconstructor = new MerkleTreeReconstructor(contract)
       let treeData = null
 
-      // Generate proofs if needed with intelligent caching
+      // Generate proofs if needed by fetching census data from subgraph
       if (plan.requiresProofs) {
-        // Check if we have cached data for current census root
-        const currentRoot = await contract.getCensusRoot()
-        const cachedData = reconstructor.getCachedCensusData()
-        
-        if (cachedData && cachedData.root === currentRoot.toString()) {
-          console.log('Using cached tree data for proof generation')
-          treeData = cachedData
-        } else {
-          console.log('Reconstructing tree for proof generation...')
-          treeData = await reconstructor.reconstructTree()
-        }
+        console.log('Fetching census data from subgraph for proof generation...')
+        treeData = await fetchCensusDataFromSubgraph(contract)
       }
 
       // Execute each operation
@@ -404,12 +465,18 @@ export const useDelegation = (
             }
 
             // Generate proofs for the delegate losing tokens
-            const fromProofs: { account: string; siblings: string[] }[] = []
+            const fromProofs: { account: string; currentWeight: number; siblings: string[] }[] = []
+
+            // Query current weight from subgraph
+            const subgraph = getSubgraphClient()
+            const currentWeight = await subgraph.getAccountWeight(operation.from)
+
             if (treeData) {
               const proofs = generateProofs(treeData, [operation.from])
               const proof = proofs[operation.from] || []
               fromProofs.push({
                 account: operation.from,
+                currentWeight,
                 siblings: proof
               })
             }
@@ -417,7 +484,7 @@ export const useDelegation = (
             txHash = await contract.undelegate(
               operation.collectionIndex,
               delegatedTokens,
-              fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) }))
+              fromProofs.map(p => ({ account: p.account, currentWeight: p.currentWeight, siblings: p.siblings.map((s: string) => BigInt(s)) }))
             )
             break
           }
@@ -434,13 +501,22 @@ export const useDelegation = (
             }
 
             // Generate fromProofs for delegates losing tokens
-            const fromProofs: { account: string; siblings: string[] }[] = []
+            const fromProofs: { account: string; currentWeight: number; siblings: string[] }[] = []
+
+            // Query weights from subgraph for all fromDelegates
+            const subgraph = getSubgraphClient()
+            const weightsMap: Record<string, number> = {}
+            for (const delegate of fromDelegates) {
+              weightsMap[delegate] = await subgraph.getAccountWeight(delegate)
+            }
+
             if (treeData && fromDelegates.length > 0) {
               const proofs = generateProofs(treeData, fromDelegates)
               for (const delegate of fromDelegates) {
                 const proof = proofs[delegate] || []
                 fromProofs.push({
                   account: delegate,
+                  currentWeight: weightsMap[delegate] || 0,
                   siblings: proof
                 })
               }
@@ -460,7 +536,7 @@ export const useDelegation = (
               operation.to,
               operation.collectionIndex,
               tokensToMove,
-              fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) })),
+              fromProofs.map(p => ({ account: p.account, currentWeight: p.currentWeight, siblings: p.siblings.map((s: string) => BigInt(s)) })),
               toProof.map((s: string) => BigInt(s))
             )
             break
@@ -741,7 +817,6 @@ export const useDelegation = (
     setError(null)
 
     try {
-      const reconstructor = new MerkleTreeReconstructor(contract)
       let treeData = null
 
       // For single operations, we need to check if THIS operation needs proofs
@@ -764,17 +839,8 @@ export const useDelegation = (
 
       // Generate proofs if needed with intelligent caching
       if (operationNeedsProofs) {
-        // Check if we have cached data for current census root
-        const currentRoot = await contract.getCensusRoot()
-        const cachedData = reconstructor.getCachedCensusData()
-        
-        if (cachedData && cachedData.root === currentRoot.toString()) {
-          console.log('Using cached tree data for single operation proof generation')
-          treeData = cachedData
-        } else {
-          console.log('Reconstructing tree for single operation proof generation...')
-          treeData = await reconstructor.reconstructTree()
-        }
+        console.log('Fetching census data from subgraph for single operation proof generation...')
+        treeData = await fetchCensusDataFromSubgraph(contract)
       }
 
       let txHash: string
@@ -881,12 +947,18 @@ export const useDelegation = (
           console.log('Token IDs:', tokensToUndelegate)
 
           // Generate proofs for the delegate losing tokens
-          const fromProofs: { account: string; siblings: string[] }[] = []
+          const fromProofs: { account: string; currentWeight: number; siblings: string[] }[] = []
+
+          // Query current weight from subgraph
+          const subgraph = getSubgraphClient()
+          const currentWeight = await subgraph.getAccountWeight(operation.from)
+
           if (treeData) {
             const proofs = generateProofs(treeData, [operation.from])
             const proof = proofs[operation.from] || []
             fromProofs.push({
               account: operation.from,
+              currentWeight,
               siblings: proof
             })
             console.log('Generated proof for', operation.from, ':', proof)
@@ -894,6 +966,7 @@ export const useDelegation = (
             // If no tree data, still need to provide the proof structure
             fromProofs.push({
               account: operation.from,
+              currentWeight,
               siblings: []
             })
             console.log('No tree data, using empty proof for', operation.from)
@@ -902,7 +975,7 @@ export const useDelegation = (
           txHash = await contract.undelegate(
             operation.collectionIndex,
             tokensToUndelegate,
-            fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) }))
+            fromProofs.map(p => ({ account: p.account, currentWeight: p.currentWeight, siblings: p.siblings.map((s: string) => BigInt(s)) }))
           )
           break
         }
@@ -918,13 +991,22 @@ export const useDelegation = (
           }
 
           // Generate fromProofs for delegates losing tokens
-          const fromProofs: { account: string; siblings: string[] }[] = []
+          const fromProofs: { account: string; currentWeight: number; siblings: string[] }[] = []
+
+          // Query weights from subgraph for all fromDelegates
+          const subgraph = getSubgraphClient()
+          const weightsMap: Record<string, number> = {}
+          for (const delegate of fromDelegates) {
+            weightsMap[delegate] = await subgraph.getAccountWeight(delegate)
+          }
+
           if (treeData && fromDelegates.length > 0) {
             const proofs = generateProofs(treeData, fromDelegates)
             for (const delegate of fromDelegates) {
               const proof = proofs[delegate] || []
               fromProofs.push({
                 account: delegate,
+                currentWeight: weightsMap[delegate] || 0,
                 siblings: proof
               })
             }
@@ -944,7 +1026,7 @@ export const useDelegation = (
             operation.to,
             operation.collectionIndex,
             tokensToMove,
-            fromProofs.map(p => ({ account: p.account, siblings: p.siblings.map((s: string) => BigInt(s)) })),
+            fromProofs.map(p => ({ account: p.account, currentWeight: p.currentWeight, siblings: p.siblings.map((s: string) => BigInt(s)) })),
             toProof.map((s: string) => BigInt(s))
           )
           break

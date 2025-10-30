@@ -31,12 +31,17 @@
   },
   {
     "type": "function",
-    "name": "computeLeaf",
+    "name": "computeLeafWithWeight",
     "inputs": [
       {
         "name": "account",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "weight",
+        "type": "uint88",
+        "internalType": "uint88"
       }
     ],
     "outputs": [
@@ -46,7 +51,7 @@
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -68,6 +73,11 @@
         "internalType": "uint256[]"
       },
       {
+        "name": "currentWeightOfTo",
+        "type": "uint88",
+        "internalType": "uint88"
+      },
+      {
         "name": "toProof",
         "type": "uint256[]",
         "internalType": "uint256[]"
@@ -81,6 +91,11 @@
             "name": "account",
             "type": "address",
             "internalType": "address"
+          },
+          {
+            "name": "currentWeight",
+            "type": "uint88",
+            "internalType": "uint88"
           },
           {
             "name": "siblings",
@@ -100,30 +115,6 @@
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getDelegations",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "weight",
-        "type": "uint88",
-        "internalType": "uint88"
-      },
-      {
-        "name": "leaf",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -199,25 +190,6 @@
   },
   {
     "type": "function",
-    "name": "rootBlockNumbers",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tokenDelegate",
     "inputs": [
       {
@@ -260,6 +232,11 @@
             "internalType": "address"
           },
           {
+            "name": "currentWeight",
+            "type": "uint88",
+            "internalType": "uint88"
+          },
+          {
             "name": "siblings",
             "type": "uint256[]",
             "internalType": "uint256[]"
@@ -290,6 +267,11 @@
         "internalType": "uint256[]"
       },
       {
+        "name": "currentWeightOfTo",
+        "type": "uint88",
+        "internalType": "uint88"
+      },
+      {
         "name": "fromProofs",
         "type": "tuple[]",
         "internalType": "struct DavinciDao.ProofInput[]",
@@ -298,6 +280,11 @@
             "name": "account",
             "type": "address",
             "internalType": "address"
+          },
+          {
+            "name": "currentWeight",
+            "type": "uint88",
+            "internalType": "uint88"
           },
           {
             "name": "siblings",
@@ -314,25 +301,6 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "weightOf",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint88",
-        "internalType": "uint88"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -512,6 +480,11 @@
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidBufferSize",
+    "inputs": []
   },
   {
     "type": "error",

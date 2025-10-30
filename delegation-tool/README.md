@@ -66,6 +66,7 @@ The binary will be created at `bin/delegate` (approximately 15MB).
 ./bin/delegate \
   --contract 0x1234567890abcdef1234567890abcdef12345678 \
   --rpc https://sepolia.infura.io/v3/YOUR_API_KEY \
+  --subgraph-url https://api.studio.thegraph.com/query/YOUR_SUBGRAPH \
   --private-key YOUR_PRIVATE_KEY_HEX \
   --delegates 5
 ```
@@ -76,9 +77,12 @@ The binary will be created at `bin/delegate` (approximately 15MB).
 |------|------|----------|---------|-------------|
 | `--contract` | string | Yes | - | DavinciDAO census contract address |
 | `--rpc` | string | Yes | - | Ethereum RPC endpoint URL |
+| `--subgraph-url` | string | Yes | - | The Graph subgraph endpoint URL (required for V2 contract to query delegate weights) |
 | `--private-key` | string | Yes | - | Private key (64-character hex, without 0x prefix) |
+| `--alchemy-key` | string | No | - | Alchemy API key for fast NFT discovery (recommended for owned NFTs) |
 | `--delegates` | int | No | 1 | Number of random delegate addresses to create |
 | `--collection` | int | No | 0 | Collection index to use (0-based) |
+| `--start-token` | int | No | 1 | Starting token ID for sequential mode (when no Alchemy key) |
 | `--max-scan` | int | No | 10000 | Maximum token ID to scan when discovering NFTs |
 | `--tokens-per-tx` | int | No | 10 | Number of tokens to delegate per transaction |
 | `--confirmations` | int | No | 1 | Number of block confirmations to wait |
@@ -93,6 +97,7 @@ The binary will be created at `bin/delegate` (approximately 15MB).
 ./bin/delegate \
   --contract 0xYourContractAddress \
   --rpc https://sepolia.infura.io/v3/YOUR_API_KEY \
+  --subgraph-url https://api.studio.thegraph.com/query/YOUR_SUBGRAPH_ID/YOUR_SUBGRAPH_NAME/VERSION \
   --private-key YOUR_TEST_PRIVATE_KEY \
   --delegates 3 \
   --tokens-per-tx 5 \
@@ -107,6 +112,7 @@ Remove `--dry-run` to execute actual transactions.
 ./bin/delegate \
   --contract 0xProductionContractAddress \
   --rpc https://mainnet.infura.io/v3/YOUR_API_KEY \
+  --subgraph-url https://api.studio.thegraph.com/query/YOUR_SUBGRAPH_ID/YOUR_SUBGRAPH_NAME/VERSION \
   --private-key YOUR_PRIVATE_KEY \
   --delegates 10 \
   --tokens-per-tx 10 \
