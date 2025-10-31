@@ -776,32 +776,22 @@ export class DavinciDaoContract {
    * @param to - Address to delegate to
    * @param collectionIndex - Collection index
    * @param tokenIds - Token IDs to delegate
+   * @param currentWeightOfTo - Current weight of the delegate (from subgraph)
    * @param proof - Merkle proof for the 'to' address (empty if new delegate)
-   * @param fromProofs - Proofs for clearing inherited delegations (empty if no inherited delegations)
    */
   async delegate(
     to: string,
     collectionIndex: number,
     tokenIds: string[] | number[],
-    proof: string[] = [],
-    fromProofs: ProofInput[] = []
+    currentWeightOfTo: number,
+    proof: string[] = []
   ): Promise<string> {
     try {
       const signerContract = await this.getSignerContract()
 
-      // Query delegate's current weight from subgraph
-      let currentWeight = 0
-      try {
-        const subgraph = getSubgraphClient()
-        currentWeight = await subgraph.getAccountWeight(to)
-        console.log(`Delegate ${to} current weight: ${currentWeight}`)
-      } catch (error) {
-        console.warn('Could not get weight from subgraph, using 0:', error)
-      }
-
       // Convert tokenIds to numbers if they're strings
       const tokenIdsAsNumbers = tokenIds.map(id => typeof id === 'string' ? parseInt(id, 10) : id)
-      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, currentWeight, proof, fromProofs)
+      const tx = await signerContract.delegate(to, collectionIndex, tokenIdsAsNumbers, currentWeightOfTo, proof)
       return tx.hash
     } catch (error: unknown) {
       console.error('Delegation failed:', error)

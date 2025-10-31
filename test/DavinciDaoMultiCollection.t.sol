@@ -52,14 +52,14 @@ contract DavinciDaoMultiCollectionTest is Test {
         // Delegate token from first collection to bob (bob has weight 0)
         uint256[] memory collection1Ids = new uint256[](1);
         collection1Ids[0] = 1;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         // Delegate token from second collection to bob (bob now has weight 1)
         uint256[] memory collection2Ids = new uint256[](1);
         collection2Ids[0] = 1;
         uint256[] memory bobProof = new uint256[](1);
         bobProof[0] = 618970019642690137449562113; // Bob's leaf as sibling
-        census.delegate(bob, 1, collection2Ids, 1, bobProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 1, collection2Ids, 1, bobProof);
 
         // Weight verification is now done via subgraph or WeightChanged events
         // Bob should have weight 2 after both delegations
@@ -76,12 +76,12 @@ contract DavinciDaoMultiCollectionTest is Test {
         // Delegate token ID 1 from collection 0 to bob (bob has weight 0)
         uint256[] memory collection1Ids = new uint256[](1);
         collection1Ids[0] = 1;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         // Delegate token ID 1 from collection 1 to charlie (same token ID, different collection, charlie has weight 0)
         uint256[] memory collection2Ids = new uint256[](1);
         collection2Ids[0] = 1;
-        census.delegate(charlie, 1, collection2Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(charlie, 1, collection2Ids, 0, emptyProof);
 
         // Verify token delegations are tracked separately per collection
         address[] memory delegates1 = census.getTokenDelegations(0, collection1Ids);
@@ -106,11 +106,11 @@ contract DavinciDaoMultiCollectionTest is Test {
         uint256[] memory invalidIds = new uint256[](1);
         invalidIds[0] = 999; // Token that doesn't exist
         vm.expectRevert();
-        census.delegate(bob, 0, invalidIds, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, invalidIds, 0, emptyProof);
 
         // Same for second collection
         vm.expectRevert();
-        census.delegate(bob, 1, invalidIds, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 1, invalidIds, 0, emptyProof);
 
         vm.stopPrank();
     }
@@ -125,13 +125,13 @@ contract DavinciDaoMultiCollectionTest is Test {
         uint256[] memory collection1Ids = new uint256[](2);
         collection1Ids[0] = 1;
         collection1Ids[1] = 2;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         // Delegate tokens from second collection to charlie (charlie has weight 0)
         uint256[] memory collection2Ids = new uint256[](2);
         collection2Ids[0] = 1;
         collection2Ids[1] = 2;
-        census.delegate(charlie, 1, collection2Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(charlie, 1, collection2Ids, 0, emptyProof);
 
         // Weights are tracked via subgraph or WeightChanged events
         // Bob should have weight 2, Charlie should have weight 2
@@ -157,14 +157,14 @@ contract DavinciDaoMultiCollectionTest is Test {
         // First delegate token from first collection to bob (bob has weight 0)
         uint256[] memory collection1Ids = new uint256[](1);
         collection1Ids[0] = 1;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         // First delegate token from second collection to bob (bob now has weight 1)
         uint256[] memory collection2Ids = new uint256[](1);
         collection2Ids[0] = 1;
         uint256[] memory bobProof = new uint256[](1);
         bobProof[0] = 618970019642690137449562113; // Bob's leaf as sibling
-        census.delegate(bob, 1, collection2Ids, 1, bobProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 1, collection2Ids, 1, bobProof);
 
         // Bob now has weight 2
 
@@ -191,13 +191,13 @@ contract DavinciDaoMultiCollectionTest is Test {
         uint256[] memory collection1Ids = new uint256[](2);
         collection1Ids[0] = 1;
         collection1Ids[1] = 2;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         uint256[] memory collection2Ids = new uint256[](1);
         collection2Ids[0] = 1;
         uint256[] memory bobProof = new uint256[](1);
         bobProof[0] = 618970019642690137449562114; // Bob's leaf as sibling
-        census.delegate(bob, 1, collection2Ids, 2, bobProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 1, collection2Ids, 2, bobProof);
 
         // Test getNFTids for first collection
         uint256[] memory candidateIds1 = new uint256[](3);
@@ -242,12 +242,12 @@ contract DavinciDaoMultiCollectionTest is Test {
         // Delegate token ID 1 from first collection to bob (bob has weight 0)
         uint256[] memory collection1Ids = new uint256[](1);
         collection1Ids[0] = 1;
-        census.delegate(bob, 0, collection1Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(bob, 0, collection1Ids, 0, emptyProof);
 
         // Delegate token ID 1 from second collection to charlie (charlie has weight 0)
         uint256[] memory collection2Ids = new uint256[](1);
         collection2Ids[0] = 1;
-        census.delegate(charlie, 1, collection2Ids, 0, emptyProof, new DavinciDao.ProofInput[](0));
+        census.delegate(charlie, 1, collection2Ids, 0, emptyProof);
 
         // Verify that each token is delegated to the correct person
         address[] memory delegates1 = census.getTokenDelegations(0, collection1Ids);

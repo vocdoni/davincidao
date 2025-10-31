@@ -432,10 +432,6 @@ export class DelegateCall__Inputs {
   get toProof(): Array<BigInt> {
     return this._call.inputValues[4].value.toBigIntArray();
   }
-
-  get fromProofs(): Array<DelegateCallFromProofsStruct> {
-    return this._call.inputValues[5].value.toTupleArray<DelegateCallFromProofsStruct>();
-  }
 }
 
 export class DelegateCall__Outputs {
@@ -443,20 +439,6 @@ export class DelegateCall__Outputs {
 
   constructor(call: DelegateCall) {
     this._call = call;
-  }
-}
-
-export class DelegateCallFromProofsStruct extends ethereum.Tuple {
-  get account(): Address {
-    return this[0].toAddress();
-  }
-
-  get currentWeight(): BigInt {
-    return this[1].toBigInt();
-  }
-
-  get siblings(): Array<BigInt> {
-    return this[2].toBigIntArray();
   }
 }
 

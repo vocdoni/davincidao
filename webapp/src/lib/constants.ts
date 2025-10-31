@@ -59,7 +59,7 @@ export const DAVINCI_DAO_ABI = [
   'function computeLeafWithWeight(address account, uint88 weight) external pure returns (uint256)',
 
   // Mutating functions (REQUIRES MERKLE PROOFS!)
-  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint88 currentWeightOfTo, uint256[] calldata toProof, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata fromProofs) external',
+  'function delegate(address to, uint256 nftIndex, uint256[] calldata ids, uint88 currentWeightOfTo, uint256[] calldata toProof) external',
   'function undelegate(uint256 nftIndex, uint256[] calldata ids, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata proofs) external',
   'function updateDelegation(address newDelegate, uint256 nftIndex, uint256[] calldata ids, uint88 currentWeightOfTo, tuple(address account, uint88 currentWeight, uint256[] siblings)[] calldata fromProofs, uint256[] calldata toProof) external',
   'function updateCensusRoot(uint256 newRoot) external', // Owner only

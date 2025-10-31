@@ -435,20 +435,23 @@ export const useDelegation = (
             
             // Generate proof if needed
             let proof: string[] = []
+            let currentWeight = 0
             if (treeData) {
-              const currentWeight = await contract.getWeightOf(operation.to)
+              // Get current weight from tree data
+              const accountNode = treeData.nodes.find(n => n.address.toLowerCase() === operation.to!.toLowerCase())
+              currentWeight = accountNode?.weight || 0
               if (currentWeight > 0) {
-                const proofs = generateProofs(treeData, [operation.to])
-                proof = proofs[operation.to] || []
+                const proofs = generateProofs(treeData, [operation.to!])
+                proof = proofs[operation.to!] || []
               }
             }
 
             txHash = await contract.delegate(
-              operation.to,
+              operation.to!,
               operation.collectionIndex,
-              tokensToDelegate,
-              proof,
-              [] // No inherited delegations for normal delegation flow
+              tokensToDelegate,  // Keep as string[]
+              currentWeight,  // Pass as number
+              proof  // Already string[]
             )
             break
           }
@@ -892,14 +895,17 @@ export const useDelegation = (
           
           // Generate proof if needed
           let proof: string[] = []
+          let currentWeight = 0
           if (treeData) {
-            const currentWeight = await contract.getWeightOf(operation.to)
+            // Get current weight from tree data
+            const accountNode = treeData.nodes.find(n => n.address.toLowerCase() === operation.to!.toLowerCase())
+            currentWeight = accountNode?.weight || 0
             console.log(`Current weight for ${operation.to}: ${currentWeight}`)
             if (currentWeight > 0) {
-              const proofs = generateProofs(treeData, [operation.to])
-              proof = proofs[operation.to] || []
+              const proofs = generateProofs(treeData, [operation.to!])
+              proof = proofs[operation.to!] || []
               console.log(`Generated proof for ${operation.to}:`, proof)
-              
+
               // Remove special case handling - let the contract handle single-node trees
               console.log(`Using generated proof with ${proof.length} elements`)
             } else {
@@ -910,10 +916,11 @@ export const useDelegation = (
           }
 
           txHash = await contract.delegate(
-            operation.to,
+            operation.to!,
             operation.collectionIndex,
-            tokensToDelegate,
-            proof
+            tokensToDelegate,  // Keep as string[]
+            currentWeight,  // Pass as number
+            proof  // Already string[]
           )
           break
         }

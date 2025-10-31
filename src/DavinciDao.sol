@@ -123,30 +123,24 @@ contract DavinciDao {
     }
 
     /// @notice Returns token IDs that are delegated and **still currently owned** by `msg.sender`
-    /// @dev Gas optimized: uses tokenDelegate mapping instead of _ownerDelegated
-    function getNFTids(uint256 nftIndex, uint256[] calldata candidateIds) external view returns (uint256[] memory) {
+    /// @dev Gas optimized: single-pass iteration with assembly array shrinking
+    function getNFTids(uint256 nftIndex, uint256[] calldata candidateIds) external view returns (uint256[] memory out) {
         _checkIndex(nftIndex);
-        uint256 count;
-        for (uint256 i = 0; i < candidateIds.length; ++i) {
-            uint256 id = candidateIds[i];
-            bytes32 key = _tokenKey(nftIndex, id);
-            // Token is delegated (to anyone) AND owned by caller
-            if (tokenDelegate[key] != address(0) && _owns(nftIndex, msg.sender, id)) {
-                unchecked {
-                    ++count;
-                }
-            }
-        }
-        uint256[] memory out = new uint256[](count);
+        address token = collections[nftIndex].token; // cache storage → stack
+        uint256 len = candidateIds.length;
+        out = new uint256[](len);
         uint256 k;
-        for (uint256 i = 0; i < candidateIds.length; ++i) {
+
+        for (uint256 i; i < len; ) {
             uint256 id = candidateIds[i];
-            bytes32 key = _tokenKey(nftIndex, id);
-            if (tokenDelegate[key] != address(0) && _owns(nftIndex, msg.sender, id)) {
+            if (tokenDelegate[_tokenKey(nftIndex, id)] != address(0)
+                && IERC721(token).ownerOf(id) == msg.sender) {
                 out[k++] = id;
             }
+            unchecked { ++i; }
         }
-        return out;
+        // shrink memory array length in-place
+        assembly { mstore(out, k) }
     }
 
 
@@ -161,26 +155,20 @@ contract DavinciDao {
     /// @param ids               Token IDs to delegate.
     /// @param currentWeightOfTo Current weight of `to` (verified by proof, obtained from subgraph).
     /// @param toProof           Merkle path for `to`'s existing leaf (empty if `to` has zero weight).
-    /// @param fromProofs        Proofs for clearing inherited delegations (if any tokens were previously delegated by another owner).
     function delegate(
         address to,
         uint256 nftIndex,
         uint256[] calldata ids,
         uint88 currentWeightOfTo,
-        uint256[] calldata toProof,
-        ProofInput[] calldata fromProofs
+        uint256[] calldata toProof
     ) external {
         _checkIndex(nftIndex);
         if (to == address(0)) revert ZeroAddress();
 
-        // Process delegations and get inherited delegation info
-        (address[] memory inheritedDelegates, uint256[] memory inheritedCounts, uint256 uniqueInherited, uint256 added)
-        = _processDelegations(to, nftIndex, ids);
+        // Process delegations (reverts if any token already delegated)
+        uint256 added = _processDelegations(to, nftIndex, ids);
 
         if (added == 0) revert NoNewDelegations();
-
-        // Clear inherited delegations first (decrease weights of previous delegates)
-        _applyInheritedProofs(inheritedDelegates, inheritedCounts, uniqueInherited, fromProofs);
 
         // Apply weight increase for new delegate
         _applyDelta(to, int256(added), currentWeightOfTo, toProof);
@@ -196,6 +184,9 @@ contract DavinciDao {
     function undelegate(uint256 nftIndex, uint256[] calldata ids, ProofInput[] calldata proofs) external {
         _checkIndex(nftIndex);
 
+        // Batch ownership verification with transient storage cache
+        _verifyOwnershipBatch(nftIndex, msg.sender, ids);
+
         // Aggregate decrements per delegate and collect token IDs per delegate for batch events
         address[] memory delAddrs = new address[](ids.length);
         uint256[] memory counts = new uint256[](ids.length);
@@ -209,7 +200,7 @@ contract DavinciDao {
 
         for (uint256 i = 0; i < ids.length; ++i) {
             uint256 id = ids[i];
-            if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
+            // Ownership already verified in batch above
 
             bytes32 key = _tokenKey(nftIndex, id);
             address del = tokenDelegate[key];
@@ -360,6 +351,9 @@ contract DavinciDao {
         internal
         returns (address[] memory fromAddrs, uint256[] memory fromCounts, uint256 unique, uint256 added)
     {
+        // Batch ownership verification with transient storage cache
+        _verifyOwnershipBatch(nftIndex, msg.sender, ids);
+
         fromAddrs = new address[](ids.length);
         fromCounts = new uint256[](ids.length);
         uint256[][] memory undelegatedIdsByDelegate = new uint256[][](ids.length);
@@ -372,7 +366,7 @@ contract DavinciDao {
 
         for (uint256 i = 0; i < ids.length; ++i) {
             uint256 id = ids[i];
-            if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
+            // Ownership already verified in batch above
 
             bytes32 key = _tokenKey(nftIndex, id);
             address prev = tokenDelegate[key];
@@ -458,6 +452,64 @@ contract DavinciDao {
         return IERC721(c.token).ownerOf(tokenId) == owner;
     }
 
+    /// @dev Ownership check with transient storage cache (EIP-1153)
+    /// @notice Uses TLOAD/TSTORE for cheap within-transaction caching
+    /// @param token Cached token address (stack variable to avoid SLOAD)
+    /// @param owner Expected owner address
+    /// @param tokenId Token ID to verify
+    /// @param cacheKey Pre-computed cache key for this token
+    function _ownsWithCache(
+        address token,
+        address owner,
+        uint256 tokenId,
+        bytes32 cacheKey
+    ) internal returns (bool) {
+        address cachedOwner;
+
+        assembly {
+            // TLOAD - load from transient storage (5 gas if cached)
+            cachedOwner := tload(cacheKey)
+        }
+
+        if (cachedOwner == address(0)) {
+            // Cache miss - perform actual ownerOf() call (~2600 gas cold, ~100 gas warm)
+            cachedOwner = IERC721(token).ownerOf(tokenId);
+
+            assembly {
+                // TSTORE - store to transient storage (8 gas)
+                // Cache persists for remainder of transaction then auto-clears
+                tstore(cacheKey, cachedOwner)
+            }
+        }
+        // Cache hit - only paid 5 gas for TLOAD!
+
+        return cachedOwner == owner;
+    }
+
+    /// @dev Batch ownership verification with transient storage cache
+    /// @notice Optimized for multiple tokens: caches token address, uses transient storage
+    /// @param nftIndex Collection index
+    /// @param expectedOwner Expected owner of all tokens
+    /// @param ids Token IDs to verify
+    function _verifyOwnershipBatch(
+        uint256 nftIndex,
+        address expectedOwner,
+        uint256[] calldata ids
+    ) internal {
+        address token = collections[nftIndex].token; // Cache storage → stack (SLOAD → stack)
+
+        for (uint256 i; i < ids.length; ) {
+            uint256 id = ids[i];
+            bytes32 cacheKey = keccak256(abi.encodePacked(nftIndex, id));
+
+            if (!_ownsWithCache(token, expectedOwner, id, cacheKey)) {
+                revert NotTokenOwner(id);
+            }
+
+            unchecked { ++i; }
+        }
+    }
+
     /// @dev Linear search utilities for small batches.
     function _indexOf(address[] memory arr, uint256 len, address a) internal pure returns (uint256) {
         for (uint256 i = 0; i < len; ++i) {
@@ -473,31 +525,25 @@ contract DavinciDao {
         return type(uint256).max;
     }
 
-    /// @dev Process delegations for the delegate function, handling inherited delegations
+    /// @dev Process delegations for the delegate function
     function _processDelegations(address to, uint256 nftIndex, uint256[] calldata ids)
         internal
-        returns (
-            address[] memory inheritedDelegates,
-            uint256[] memory inheritedCounts,
-            uint256 uniqueInherited,
-            uint256 added
-        )
+        returns (uint256 added)
     {
-        inheritedDelegates = new address[](ids.length);
-        inheritedCounts = new uint256[](ids.length);
+        // Batch ownership verification with transient storage cache
+        _verifyOwnershipBatch(nftIndex, msg.sender, ids);
+
         uint256[] memory addedIds = new uint256[](ids.length);
 
         for (uint256 i = 0; i < ids.length; ++i) {
             uint256 id = ids[i];
-            if (!_owns(nftIndex, msg.sender, id)) revert NotTokenOwner(id);
+            // Ownership already verified in batch above
 
             bytes32 key = _tokenKey(nftIndex, id);
             address existingDelegate = tokenDelegate[key];
 
             // If already delegated, must use updateDelegation or undelegate first
             if (existingDelegate != address(0)) {
-                // Simplified: treat all existing delegations the same
-                // Owner must undelegate first before re-delegating
                 revert AlreadyDelegated(id);
             }
 
@@ -519,18 +565,4 @@ contract DavinciDao {
         }
     }
 
-    /// @dev Apply weight decreases for inherited delegations using proofs
-    function _applyInheritedProofs(
-        address[] memory inheritedDelegates,
-        uint256[] memory inheritedCounts,
-        uint256 uniqueInherited,
-        ProofInput[] calldata fromProofs
-    ) internal {
-        for (uint256 k = 0; k < uniqueInherited; ++k) {
-            address acct = inheritedDelegates[k];
-            uint256 pIdx = _indexOfProof(fromProofs, acct);
-            if (pIdx == type(uint256).max) revert ProofRequired(acct);
-            _applyDelta(acct, -int256(inheritedCounts[k]), fromProofs[pIdx].currentWeight, fromProofs[pIdx].siblings);
-        }
-    }
 }

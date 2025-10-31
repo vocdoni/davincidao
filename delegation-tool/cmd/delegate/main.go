@@ -419,7 +419,6 @@ func executeDelegations(
 		// Send delegation transaction (with empty proofs for new delegations)
 		fmt.Println("   ⏳ Sending transaction...")
 		emptyProof := make([]*big.Int, 0)
-		emptyFromProofs := make([]census.DavinciDaoProofInput, 0)
 		tx, err := contract.Delegate(
 			auth,
 			delegate,
@@ -427,7 +426,6 @@ func executeDelegations(
 			tokenIDs,
 			big.NewInt(int64(currentWeight)), // Pass current weight for V2 contract
 			emptyProof,
-			emptyFromProofs,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to send delegation transaction: %w", err)

@@ -81,28 +81,6 @@
         "name": "toProof",
         "type": "uint256[]",
         "internalType": "uint256[]"
-      },
-      {
-        "name": "fromProofs",
-        "type": "tuple[]",
-        "internalType": "struct DavinciDao.ProofInput[]",
-        "components": [
-          {
-            "name": "account",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "currentWeight",
-            "type": "uint88",
-            "internalType": "uint88"
-          },
-          {
-            "name": "siblings",
-            "type": "uint256[]",
-            "internalType": "uint256[]"
-          }
-        ]
       }
     ],
     "outputs": [],
@@ -138,7 +116,7 @@
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "out",
         "type": "uint256[]",
         "internalType": "uint256[]"
       }
