@@ -10,7 +10,7 @@ dataSources:
     name: DavinciDao
     network: sepolia
     source:
-      address: "0x682b6F4B17935605aBd2582418546bF7C45da610"
+      address: "0xbAcEeb16f8eBD4F52d2E6AF4a1FB03224A75D9FC"
       abi: DavinciDao
       startBlock: 9526152
     mapping:

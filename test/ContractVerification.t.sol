@@ -28,7 +28,7 @@ contract ContractVerificationTest is Test {
         console.log("Census root:", root);
         assertTrue(true, "getCensusRoot() works");
 
-        // Test collections access - for a struct with one field, the getter returns just the field value
+        // Test collections access
         address tokenAddress = census.collections(0);
         console.log("Collection 0 token:", tokenAddress);
         assertTrue(tokenAddress != address(0), "Collection should have valid token address");

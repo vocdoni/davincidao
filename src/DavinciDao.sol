@@ -9,6 +9,9 @@ import {CircularBuffer} from "openzeppelin-contracts/contracts/utils/structs/Cir
 import {InternalLeanIMT, LeanIMTData} from "zk-kit.solidity/packages/lean-imt/contracts/InternalLeanIMT.sol";
 import {SNARK_SCALAR_FIELD} from "zk-kit.solidity/packages/lean-imt/contracts/Constants.sol";
 
+// Census validator interface
+import {ICensusValidator} from "./ICensusValidator.sol";
+
 /// @title DavinciDAO Census Contract
 /// @notice Maintains an on-chain Merkle tree for NFT-based voting power delegation.
 /// @dev Features:
@@ -16,14 +19,15 @@ import {SNARK_SCALAR_FIELD} from "zk-kit.solidity/packages/lean-imt/contracts/Co
 ///      - Circular buffer root history (gas-optimized, last N roots)
 ///      - Event emission for The Graph indexing
 ///      - Proof-based delegation for security and gas efficiency
-contract DavinciDao {
+/// @dev Implements ICensusValidator for external contract integration
+contract DavinciDao is ICensusValidator {
     using InternalLeanIMT for LeanIMTData;
     using CircularBuffer for CircularBuffer.Bytes32CircularBuffer;
 
     // ========= Types & storage =========
 
     struct Collection {
-        address token; // ERC-721 contract
+        address token;        // ERC-721 contract address
     }
 
     /// @notice Proof for a specific account's leaf (required by _update/_remove).

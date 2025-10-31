@@ -80,15 +80,11 @@ export const ERC721_ABI = [
   'function name() external view returns (string memory)',
   'function symbol() external view returns (string memory)',
   'function tokenURI(uint256 tokenId) external view returns (string memory)',
-  
-  // Enumeration (if supported)
   'function totalSupply() external view returns (uint256)',
-  'function tokenOfOwnerByIndex(address owner, uint256 index) external view returns (uint256 tokenId)',
-  'function tokenByIndex(uint256 index) external view returns (uint256 tokenId)',
-  
+
   // Interface detection
   'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
-  
+
   // Events
   'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
 ] as const
@@ -168,7 +164,6 @@ export const UI_CONFIG = {
 export const ERC721_INTERFACE_IDS = {
   ERC721: '0x80ac58cd',
   ERC721_METADATA: '0x5b5e139f',
-  ERC721_ENUMERABLE: '0x780e9d63',
 } as const
 
 // Error messages

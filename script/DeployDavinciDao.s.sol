@@ -14,13 +14,18 @@ import {DavinciDao} from "../src/DavinciDao.sol";
 contract DeployDavinciDao is Script {
     function run() external {
         // Read NFT collection addresses from environment or use defaults
-        address[] memory collections = new address[](1);
+        address[] memory collections = new address[](2);
 
         // Default: Use existing test NFT collection
         collections[0] = vm.envOr(
             "COLLECTION_ADDRESS",
             address(0x7c61Ae9629664D1CEEc8Abc0fD17CB0866d86d89)
         );
+        collections[1] = vm.envOr(
+            "COLLECTION_ADDRESS",
+            address(0x0FaC6B282b1c1dfde72266813175b5f05591BC11)
+        );
+
 
         console2.log("===========================================================");
         console2.log("          DavinciDAO Census Deployment Script");
