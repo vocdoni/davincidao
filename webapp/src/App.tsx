@@ -712,10 +712,10 @@ function DashboardContent() {
         onClose={() => setShowDelegatorsModal(false)}
       />
 
-      {/* Loading Modal - Show during initial NFT discovery */}
+      {/* Loading Modal - Show during NFT discovery and refresh */}
       <LoadingModal
-        isOpen={loading && !hasLoadedOnce}
-        message="DISCOVERING YOUR NFTs..."
+        isOpen={loading}
+        message={!hasLoadedOnce ? "DISCOVERING YOUR NFTs..." : "REFRESHING DATA..."}
       />
     </div>
   )
