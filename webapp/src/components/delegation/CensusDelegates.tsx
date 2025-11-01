@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '~/components/common/Button'
 import { getSubgraphClient } from '~/lib/subgraph-client'
-import { CONTRACT_CONFIG } from '~/lib/constants'
 import { AllDelegatesModal } from './AllDelegatesModal'
+import { WalletAddress } from '~/components/common/AddressDisplay'
 
 interface Delegate {
   address: string
@@ -13,9 +13,10 @@ interface Delegate {
 interface CensusDelegatesProps {
   onAddDelegate?: (address: string) => void
   existingDelegates?: string[]
+  refreshTrigger?: number // Increment this to trigger a refresh
 }
 
-export const CensusDelegates = ({ onAddDelegate, existingDelegates = [] }: CensusDelegatesProps) => {
+export const CensusDelegates = ({ onAddDelegate, existingDelegates = [], refreshTrigger }: CensusDelegatesProps) => {
   const [topDelegates, setTopDelegates] = useState<Delegate[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +24,7 @@ export const CensusDelegates = ({ onAddDelegate, existingDelegates = [] }: Censu
 
   useEffect(() => {
     loadTopDelegates()
-  }, [])
+  }, [refreshTrigger])
 
   const loadTopDelegates = async () => {
     setIsLoading(true)
@@ -46,14 +47,6 @@ export const CensusDelegates = ({ onAddDelegate, existingDelegates = [] }: Censu
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const getExplorerUrl = (address: string) => {
-    return `${CONTRACT_CONFIG.blockExplorerUrl}/address/${address}`
-  }
-
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
   const getRankColor = (rank: number) => {
@@ -91,40 +84,18 @@ export const CensusDelegates = ({ onAddDelegate, existingDelegates = [] }: Censu
       <div className="card overflow-hidden">
         {/* Header with gradient */}
         <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-lg font-bold">Census Delegates</h2>
-                <p className="text-sm text-purple-100">
-                  Top weighted addresses
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={loadTopDelegates}
-              disabled={isLoading}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
-              title="Refresh"
-            >
-              <svg
-                className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-            </button>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Current Delegates</h2>
+              <p className="text-sm text-purple-100">
+                Top weighted addresses
+              </p>
+            </div>
           </div>
         </div>
 
@@ -177,20 +148,7 @@ export const CensusDelegates = ({ onAddDelegate, existingDelegates = [] }: Censu
                       {/* Delegate Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-sm font-medium text-gray-900">
-                            {formatAddress(delegate.address)}
-                          </span>
-                          <a
-                            href={getExplorerUrl(delegate.address)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <svg className="w-4 h-4 text-gray-400 hover:text-purple-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
+                          <WalletAddress address={delegate.address} />
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-gray-500">Rank #{index + 1}</span>

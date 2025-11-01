@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatAddress } from '~/lib/utils'
+import { lookupENSName } from '~/lib/ens'
 
 interface AddressDisplayProps {
   address: string
@@ -9,18 +10,51 @@ interface AddressDisplayProps {
   className?: string
   copyable?: boolean
   linkable?: boolean
+  showENS?: boolean // New prop to enable ENS lookup
 }
 
-export const AddressDisplay = ({ 
-  address, 
+export const AddressDisplay = ({
+  address,
   type = 'address',
   label,
   showFull = false,
   className = '',
   copyable = true,
-  linkable = true
+  linkable = true,
+  showENS = false
 }: AddressDisplayProps) => {
   const [copied, setCopied] = useState(false)
+  const [ensName, setEnsName] = useState<string | null>(null)
+  const [ensLoading, setEnsLoading] = useState(false)
+
+  // Perform ENS reverse lookup if enabled
+  useEffect(() => {
+    if (!showENS || type !== 'address') return
+
+    let cancelled = false
+    setEnsLoading(true)
+
+    const fetchENS = async () => {
+      try {
+        const name = await lookupENSName(address)
+        if (!cancelled) {
+          setEnsName(name)
+        }
+      } catch (error) {
+        console.warn('Failed to lookup ENS for', address, error)
+      } finally {
+        if (!cancelled) {
+          setEnsLoading(false)
+        }
+      }
+    }
+
+    fetchENS()
+
+    return () => {
+      cancelled = true
+    }
+  }, [address, showENS, type])
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -68,10 +102,29 @@ export const AddressDisplay = ({
       {label && (
         <span className="text-sm text-gray-600 mr-1">{label}:</span>
       )}
-      
-      <code className="bg-gray-100 px-2 py-1 rounded text-xs font-mono break-all">
-        {/* Always show shortened format by default (0x3316...5de1), unless showFull is true */}
-        {showFull ? address : formatAddress(address)}
+
+      <code className={`bg-gray-100 px-2 py-1 rounded text-xs break-all ${
+        ensName ? 'font-medium' : 'font-mono'
+      }`}>
+        {ensLoading && showENS ? (
+          <span className="flex items-center gap-1">
+            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {formatAddress(address)}
+          </span>
+        ) : (
+          <>
+            {ensName && <span className="text-purple-600">{ensName}</span>}
+            {ensName && ' '}
+            {ensName ? (
+              <span className="font-mono text-gray-500">({formatAddress(address)})</span>
+            ) : (
+              <span className="font-mono">{showFull ? address : formatAddress(address)}</span>
+            )}
+          </>
+        )}
       </code>
       
       <div className="flex items-center gap-1 ml-1">
@@ -119,11 +172,12 @@ export const ContractAddress = ({ address, className }: { address: string, class
   />
 )
 
-export const WalletAddress = ({ address, className }: { address: string, className?: string }) => (
-  <AddressDisplay 
-    address={address} 
+export const WalletAddress = ({ address, className, showENS = true }: { address: string, className?: string, showENS?: boolean }) => (
+  <AddressDisplay
+    address={address}
     type="address"
     className={className}
+    showENS={showENS}
   />
 )
 

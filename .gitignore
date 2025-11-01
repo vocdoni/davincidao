@@ -29,6 +29,7 @@ yarn.lock
 ehthumbs.db
 Thumbs.db
 dist/
+build/
 
 # Foundry artifacts
 lcov.info

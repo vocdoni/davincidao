@@ -15,13 +15,15 @@ interface DelegationManagerProps {
   userAddress: string | undefined
   onDataRefresh?: () => void | Promise<void>
   loading?: boolean
+  refreshTrigger?: number // Trigger for global refresh
 }
 
 export const DelegationManager = ({
   contract,
   userNFTs,
   userAddress,
-  onDataRefresh
+  onDataRefresh,
+  refreshTrigger
 }: DelegationManagerProps) => {
   const [showAddDelegate, setShowAddDelegate] = useState(false)
   const [isExecuting] = useState(false)
@@ -84,6 +86,7 @@ export const DelegationManager = ({
       <CensusDelegates
         onAddDelegate={addDelegate}
         existingDelegates={Array.from(delegationState.delegates.keys())}
+        refreshTrigger={refreshTrigger}
       />
 
       {/* Delegates List */}

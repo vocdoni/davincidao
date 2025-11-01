@@ -32,6 +32,7 @@ function DashboardContent() {
   const [contractError, setContractError] = useState<string | null>(null)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [isRefreshingCensusRoot, setIsRefreshingCensusRoot] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Tree visualization state
   const [showTreeVisualization, setShowTreeVisualization] = useState(false)
@@ -104,6 +105,9 @@ function DashboardContent() {
       const rootHex = '0x' + root.toString(16)
       setCensusRoot(rootHex)
       console.log('✓ Census root refreshed:', rootHex)
+
+      // Trigger refresh for components that depend on global data
+      setRefreshTrigger(prev => prev + 1)
     } catch (error) {
       console.error('Failed to refresh census root:', error)
     } finally {
@@ -394,6 +398,7 @@ function DashboardContent() {
               userAddress={address}
               onDataRefresh={loadInitialData}
               loading={loading}
+              refreshTrigger={refreshTrigger}
             />
           </div>
 

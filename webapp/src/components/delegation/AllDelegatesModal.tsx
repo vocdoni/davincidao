@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getSubgraphClient } from '~/lib/subgraph-client'
-import { CONTRACT_CONFIG } from '~/lib/constants'
+import { WalletAddress } from '~/components/common/AddressDisplay'
 
 interface Delegate {
   address: string
@@ -88,18 +88,6 @@ export const AllDelegatesModal = ({ isOpen, onClose, onAddDelegate, existingDele
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
   const currentDelegates = filteredDelegates.slice(startIndex, endIndex)
-
-  const getExplorerUrl = (address: string) => {
-    return `${CONTRACT_CONFIG.blockExplorerUrl}/address/${address}`
-  }
-
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 10)}...${address.slice(-8)}`
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-  }
 
   const isDelegateAdded = (address: string) => {
     return existingDelegates.some(
@@ -233,32 +221,10 @@ export const AllDelegatesModal = ({ isOpen, onClose, onAddDelegate, existingDele
 
                         {/* Address */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm font-medium text-gray-900">
-                              {formatAddress(delegate.address)}
-                            </span>
-                            <button
-                              onClick={() => copyToClipboard(delegate.address)}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
-                              title="Copy address"
-                            >
-                              <svg className="w-4 h-4 text-gray-400 hover:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            </button>
-                            <a
-                              href={getExplorerUrl(delegate.address)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
-                              title="View in explorer"
-                            >
-                              <svg className="w-4 h-4 text-gray-400 hover:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </a>
+                          <div className="mb-1">
+                            <WalletAddress address={delegate.address} />
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-gray-500">
                             Last updated: {new Date(parseInt(delegate.lastUpdatedAt) * 1000).toLocaleDateString()}
                           </div>
                         </div>
