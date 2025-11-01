@@ -299,8 +299,8 @@ export const useDelegation = (
   // Calculate what operations are needed
   const calculateTransactionPlan = useCallback(async (): Promise<TransactionPlan> => {
     if (!contract) {
-      return { 
-        operations: [], 
+      return {
+        operations: [],
         requiresProofs: false,
         currentOperationIndex: 0,
         isExecuting: false,
@@ -311,11 +311,21 @@ export const useDelegation = (
     const operations: DelegationOperation[] = []
     const proofRequirements: ProofRequirement[] = []
 
+    // Determine which collection to use (find first collection with tokens)
+    let activeCollectionIndex = 0
+    for (const [collectionIndex, tokens] of delegationState.ownedTokens.entries()) {
+      if (tokens.length > 0) {
+        activeCollectionIndex = collectionIndex
+        break
+      }
+    }
+    console.log(`Using collection index ${activeCollectionIndex} for operations`)
+
     // Analyze each delegate for changes
     for (const [address, delegate] of delegationState.delegates) {
       const currentCount = delegate.currentCount
       const pendingCount = delegate.pendingCount
-      
+
       if (currentCount === pendingCount) continue // No change
 
       // Check if this address needs a proof
@@ -334,7 +344,7 @@ export const useDelegation = (
           id: `undelegate-${address}`,
           type: 'undelegate',
           description: `Remove all ${currentCount} NFT${currentCount > 1 ? 's' : ''} from ${address}`,
-          collectionIndex: 0, // Simplified - would need to track per collection
+          collectionIndex: activeCollectionIndex,
           tokenIds: delegate.currentTokens,
           from: address,
           status: 'pending'
@@ -345,7 +355,7 @@ export const useDelegation = (
           id: `delegate-${address}`,
           type: 'delegate',
           description: `Delegate ${pendingCount} NFT${pendingCount > 1 ? 's' : ''} to ${address}`,
-          collectionIndex: 0,
+          collectionIndex: activeCollectionIndex,
           tokenIds: new Array(pendingCount).fill(''), // Placeholder - will be filled during execution
           to: address,
           status: 'pending'
@@ -354,14 +364,14 @@ export const useDelegation = (
         // Weight update - different strategies based on increase/decrease
         const change = pendingCount - currentCount
         const count = Math.abs(change)
-        
+
         if (change > 0) {
           // Increasing weight - use delegate function for new tokens
           operations.push({
             id: `delegate-increase-${address}`,
             type: 'delegate',
             description: `Add ${count} NFT${count > 1 ? 's' : ''} to ${address}`,
-            collectionIndex: 0,
+            collectionIndex: activeCollectionIndex,
             tokenIds: new Array(count).fill(''), // Placeholder - will be filled during execution
             to: address,
             status: 'pending'
@@ -372,7 +382,7 @@ export const useDelegation = (
             id: `undelegate-partial-${address}`,
             type: 'undelegate',
             description: `Remove ${count} NFT${count > 1 ? 's' : ''} from ${address}`,
-            collectionIndex: 0,
+            collectionIndex: activeCollectionIndex,
             tokenIds: new Array(count).fill(''), // Placeholder - will be filled during execution
             from: address,
             status: 'pending'

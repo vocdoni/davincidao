@@ -101,8 +101,9 @@ function DashboardContent() {
     try {
       console.log('Refreshing census root from contract...')
       const root = await contract.getCensusRoot()
-      setCensusRoot(root.toString())
-      console.log('✓ Census root refreshed:', root.toString())
+      const rootHex = '0x' + root.toString(16)
+      setCensusRoot(rootHex)
+      console.log('✓ Census root refreshed:', rootHex)
     } catch (error) {
       console.error('Failed to refresh census root:', error)
     } finally {
@@ -185,7 +186,8 @@ function DashboardContent() {
     try {
       // Check if contract exists by trying a simple call first
       const root = await contract.getCensusRoot()
-      setCensusRoot(root.toString())
+      const rootHex = '0x' + root.toString(16)  // Convert BigInt to hex string
+      setCensusRoot(rootHex)
 
       // Load user's voting weight from subgraph (V2: weights are no longer stored on-chain)
       try {

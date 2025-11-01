@@ -7,6 +7,7 @@ import { TokenOverview } from './TokenOverview'
 import { DelegatesList } from './DelegatesList'
 import { EnhancedPendingChanges } from './EnhancedPendingChanges'
 import { AddDelegateModal } from './AddDelegateModal'
+import { CensusDelegates } from './CensusDelegates'
 
 interface DelegationManagerProps {
   contract: DavinciDaoContract | null
@@ -79,6 +80,12 @@ export const DelegationManager = ({
         collectionAddresses={delegationState.collectionAddresses}
       />
 
+      {/* Census Delegates - Global Statistics */}
+      <CensusDelegates
+        onAddDelegate={addDelegate}
+        existingDelegates={Array.from(delegationState.delegates.keys())}
+      />
+
       {/* Delegates List */}
       <div className="card overflow-hidden">
         {/* Header with gradient */}
@@ -91,9 +98,9 @@ export const DelegationManager = ({
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-bold">Delegates</h2>
+                <h2 className="text-lg font-bold">Manage Your Delegations</h2>
                 <p className="text-sm text-green-100">
-                  Manage your voting delegations
+                  Assign your voting power to delegates
                 </p>
               </div>
             </div>
