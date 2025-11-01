@@ -110,9 +110,9 @@ export const DelegatorsModal = ({ isOpen, onClose }: DelegatorsModalProps) => {
           <div className="card-header flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-mono font-bold uppercase tracking-wider">[ UNIQUE DELEGATORS ]</h3>
+                <h3 className="text-lg font-mono font-bold uppercase tracking-wider">[ PARTICIPANTS ]</h3>
                 <p className="text-gray-400 mt-1 text-xs normal-case tracking-normal">
-                  Addresses that have delegated NFTs
+                  Unique addresses that have delegated NFTs
                 </p>
               </div>
               <button
@@ -165,7 +165,7 @@ export const DelegatorsModal = ({ isOpen, onClose }: DelegatorsModalProps) => {
               </button>
             </div>
             <div className="text-sm text-gray-500">
-              {filteredDelegators.length} delegator{filteredDelegators.length !== 1 ? 's' : ''} found
+              {filteredDelegators.length} participant{filteredDelegators.length !== 1 ? 's' : ''} found
             </div>
           </div>
 
@@ -202,7 +202,7 @@ export const DelegatorsModal = ({ isOpen, onClose }: DelegatorsModalProps) => {
                   </svg>
                 </div>
                 <p className="text-sm text-gray-600 font-mono">
-                  {searchQuery ? `No delegators found matching "${searchQuery}"` : 'No delegators found'}
+                  {searchQuery ? `No participants found matching "${searchQuery}"` : 'No participants found'}
                 </p>
               </div>
             ) : (

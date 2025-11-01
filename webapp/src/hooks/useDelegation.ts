@@ -225,7 +225,7 @@ export const useDelegation = (
         currentTokens: [],
         pendingTokens: [],
         currentCount: 0,
-        pendingCount: 0,
+        pendingCount: 1, // Default to 1 NFT when adding a delegate
         weight: 0
       })
 

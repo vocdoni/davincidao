@@ -49,7 +49,7 @@ function DashboardContent() {
 
   // Delegators modal
   const [showDelegatorsModal, setShowDelegatorsModal] = useState(false)
-  const [delegatorStats, setDelegatorStats] = useState<{ totalUnique: number; totalActive: number } | null>(null)
+  const [delegatorStats, setDelegatorStats] = useState<{ totalUnique: number; totalActive: number; totalWeight: number } | null>(null)
 
   // Create contract instance with wallet support
   const contract = useMemo(() => {
@@ -215,7 +215,8 @@ function DashboardContent() {
         if (stats) {
           setDelegatorStats({
             totalUnique: parseInt(stats.totalUniqueDelegators),
-            totalActive: parseInt(stats.totalActiveDelegators)
+            totalActive: parseInt(stats.totalActiveDelegators),
+            totalWeight: parseInt(stats.totalWeight)
           })
         }
       } catch (error) {
@@ -607,13 +608,13 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* Delegators - Collapsible */}
+            {/* Participants - Collapsible */}
             <div className="card overflow-hidden">
               <button
                 onClick={() => setShowDelegators(!showDelegators)}
                 className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
               >
-                <span className="text-sm uppercase tracking-wider">[ UNIQUE DELEGATORS ]</span>
+                <span className="text-sm uppercase tracking-wider">[ PARTICIPANTS ]</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showDelegators ? 'rotate-180' : ''}`}
                   fill="none"
@@ -629,9 +630,9 @@ function DashboardContent() {
                   {/* Stats Display */}
                   <div>
                     <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 block">
-                      Addresses that delegated NFTs
+                      Unique Addresses
                     </label>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
                       <div className="text-center py-3 border border-gray-200 bg-gray-50">
                         <div className="text-2xl font-mono font-bold terminal-accent">
                           {delegatorStats?.totalUnique ?? '-'}
@@ -645,6 +646,12 @@ function DashboardContent() {
                         <div className="text-xs text-gray-500 mt-1">Active Now</div>
                       </div>
                     </div>
+                    <div className="text-center py-3 border border-gray-200 bg-gray-50">
+                      <div className="text-2xl font-mono font-bold terminal-accent">
+                        {delegatorStats?.totalWeight ?? '-'}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">NFTs Delegated</div>
+                    </div>
                   </div>
 
                   {/* View Details Button */}
@@ -654,7 +661,7 @@ function DashboardContent() {
                       disabled={!delegatorStats}
                       className="btn-accent w-full text-xs"
                     >
-                      VIEW ALL DELEGATORS
+                      VIEW ALL PARTICIPANTS
                     </button>
                   </div>
                 </div>
