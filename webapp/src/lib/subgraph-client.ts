@@ -29,7 +29,20 @@ interface SubgraphGlobalStats {
   totalDelegations: string
   totalAccounts: string
   totalWeight: string
+  totalUniqueDelegators: string
+  totalActiveDelegators: string
   lastUpdatedAt: string
+}
+
+export interface SubgraphDelegator {
+  id: string
+  address: string
+  totalDelegationsMade: string
+  totalDelegationsEver: string
+  firstDelegatedAt: string
+  firstDelegatedBlock: string
+  lastDelegatedAt: string
+  lastDelegatedBlock: string
 }
 
 export class SubgraphClient {
@@ -231,6 +244,8 @@ export class SubgraphClient {
           totalDelegations
           totalAccounts
           totalWeight
+          totalUniqueDelegators
+          totalActiveDelegators
           lastUpdatedAt
         }
       }
@@ -238,6 +253,71 @@ export class SubgraphClient {
 
     const data = await this.query<{ globalStats: SubgraphGlobalStats | null }>(query)
     return data.globalStats
+  }
+
+  /**
+   * Get all delegators
+   */
+  async getAllDelegators(first: number = 100, skip: number = 0): Promise<SubgraphDelegator[]> {
+    const query = `
+      query GetDelegators($first: Int!, $skip: Int!) {
+        delegators(
+          first: $first
+          skip: $skip
+          orderBy: totalDelegationsEver
+          orderDirection: desc
+        ) {
+          id
+          address
+          totalDelegationsMade
+          totalDelegationsEver
+          firstDelegatedAt
+          firstDelegatedBlock
+          lastDelegatedAt
+          lastDelegatedBlock
+        }
+      }
+    `
+
+    const data = await this.query<{ delegators: SubgraphDelegator[] }>(
+      query,
+      { first, skip }
+    )
+
+    return data.delegators
+  }
+
+  /**
+   * Get active delegators (those with active delegations)
+   */
+  async getActiveDelegators(first: number = 100, skip: number = 0): Promise<SubgraphDelegator[]> {
+    const query = `
+      query GetActiveDelegators($first: Int!, $skip: Int!) {
+        delegators(
+          first: $first
+          skip: $skip
+          orderBy: totalDelegationsMade
+          orderDirection: desc
+          where: { totalDelegationsMade_gt: "0" }
+        ) {
+          id
+          address
+          totalDelegationsMade
+          totalDelegationsEver
+          firstDelegatedAt
+          firstDelegatedBlock
+          lastDelegatedAt
+          lastDelegatedBlock
+        }
+      }
+    `
+
+    const data = await this.query<{ delegators: SubgraphDelegator[] }>(
+      query,
+      { first, skip }
+    )
+
+    return data.delegators
   }
 
   /**

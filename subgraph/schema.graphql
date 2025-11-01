@@ -1,4 +1,4 @@
-"""Account with voting weight from delegated NFTs"""
+"""Account with voting weight from delegated NFTs (delegates - receivers)"""
 type Account @entity(immutable: false) {
   id: ID!                              # address (lowercase)
   address: Bytes!                      # original address
@@ -10,6 +10,19 @@ type Account @entity(immutable: false) {
   receivedDelegations: [TokenDelegation!]! @derivedFrom(field: "delegateAccount")
 }
 
+"""Unique wallet addresses that have performed at least one delegation (delegators - senders)"""
+type Delegator @entity(immutable: false) {
+  id: ID!                              # address (lowercase)
+  address: Bytes!                      # original address
+  totalDelegationsMade: BigInt!        # total number of NFTs this address has delegated (current active count)
+  totalDelegationsEver: BigInt!        # total number of delegation actions ever made (including undelegated)
+  firstDelegatedAt: BigInt!            # timestamp of first delegation
+  firstDelegatedBlock: BigInt!         # block number of first delegation
+  lastDelegatedAt: BigInt!             # timestamp of most recent delegation
+  lastDelegatedBlock: BigInt!          # block number of most recent delegation
+  delegations: [TokenDelegation!]! @derivedFrom(field: "delegator")
+}
+
 """NFT delegation status"""
 type TokenDelegation @entity(immutable: false) {
   id: ID!                              # ${nftIndex}-${tokenId}
@@ -18,6 +31,8 @@ type TokenDelegation @entity(immutable: false) {
   delegate: Bytes!                     # current delegate address (zero if undelegated)
   delegateAccount: Account             # Account entity (null if undelegated)
   owner: Bytes!                        # token owner at time of last delegation/undelegation
+  delegator: Delegator                 # Delegator entity (null if undelegated)
+  delegatorAddress: Bytes!             # Owner address for quick reference
   isDelegated: Boolean!                # true if currently delegated
   delegatedAt: BigInt!                 # timestamp of last delegation
   delegatedBlock: BigInt!              # block of last delegation
@@ -38,7 +53,9 @@ type CensusRoot @entity(immutable: true) {
 type GlobalStats @entity(immutable: false) {
   id: ID!                              # "global"
   totalDelegations: BigInt!            # total active delegations
-  totalAccounts: BigInt!               # accounts with weight > 0
+  totalAccounts: BigInt!               # accounts with weight > 0 (delegates)
   totalWeight: BigInt!                 # sum of all weights
+  totalUniqueDelegators: BigInt!       # unique addresses that have ever delegated
+  totalActiveDelegators: BigInt!       # unique addresses with active delegations
   lastUpdatedAt: BigInt!
 }

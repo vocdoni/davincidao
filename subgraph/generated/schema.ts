@@ -138,6 +138,145 @@ export class Account extends Entity {
   }
 }
 
+export class Delegator extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save Delegator entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type Delegator must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("Delegator", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): Delegator | null {
+    return changetype<Delegator | null>(store.get_in_block("Delegator", id));
+  }
+
+  static load(id: string): Delegator | null {
+    return changetype<Delegator | null>(store.get("Delegator", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get address(): Bytes {
+    let value = this.get("address");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set address(value: Bytes) {
+    this.set("address", Value.fromBytes(value));
+  }
+
+  get totalDelegationsMade(): BigInt {
+    let value = this.get("totalDelegationsMade");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalDelegationsMade(value: BigInt) {
+    this.set("totalDelegationsMade", Value.fromBigInt(value));
+  }
+
+  get totalDelegationsEver(): BigInt {
+    let value = this.get("totalDelegationsEver");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalDelegationsEver(value: BigInt) {
+    this.set("totalDelegationsEver", Value.fromBigInt(value));
+  }
+
+  get firstDelegatedAt(): BigInt {
+    let value = this.get("firstDelegatedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set firstDelegatedAt(value: BigInt) {
+    this.set("firstDelegatedAt", Value.fromBigInt(value));
+  }
+
+  get firstDelegatedBlock(): BigInt {
+    let value = this.get("firstDelegatedBlock");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set firstDelegatedBlock(value: BigInt) {
+    this.set("firstDelegatedBlock", Value.fromBigInt(value));
+  }
+
+  get lastDelegatedAt(): BigInt {
+    let value = this.get("lastDelegatedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastDelegatedAt(value: BigInt) {
+    this.set("lastDelegatedAt", Value.fromBigInt(value));
+  }
+
+  get lastDelegatedBlock(): BigInt {
+    let value = this.get("lastDelegatedBlock");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastDelegatedBlock(value: BigInt) {
+    this.set("lastDelegatedBlock", Value.fromBigInt(value));
+  }
+
+  get delegations(): TokenDelegationLoader {
+    return new TokenDelegationLoader(
+      "Delegator",
+      this.get("id")!.toString(),
+      "delegations",
+    );
+  }
+}
+
 export class TokenDelegation extends Entity {
   constructor(id: string) {
     super();
@@ -246,6 +385,36 @@ export class TokenDelegation extends Entity {
 
   set owner(value: Bytes) {
     this.set("owner", Value.fromBytes(value));
+  }
+
+  get delegator(): string | null {
+    let value = this.get("delegator");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set delegator(value: string | null) {
+    if (!value) {
+      this.unset("delegator");
+    } else {
+      this.set("delegator", Value.fromString(<string>value));
+    }
+  }
+
+  get delegatorAddress(): Bytes {
+    let value = this.get("delegatorAddress");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set delegatorAddress(value: Bytes) {
+    this.set("delegatorAddress", Value.fromBytes(value));
   }
 
   get isDelegated(): boolean {
@@ -484,6 +653,32 @@ export class GlobalStats extends Entity {
 
   set totalWeight(value: BigInt) {
     this.set("totalWeight", Value.fromBigInt(value));
+  }
+
+  get totalUniqueDelegators(): BigInt {
+    let value = this.get("totalUniqueDelegators");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalUniqueDelegators(value: BigInt) {
+    this.set("totalUniqueDelegators", Value.fromBigInt(value));
+  }
+
+  get totalActiveDelegators(): BigInt {
+    let value = this.get("totalActiveDelegators");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalActiveDelegators(value: BigInt) {
+    this.set("totalActiveDelegators", Value.fromBigInt(value));
   }
 
   get lastUpdatedAt(): BigInt {

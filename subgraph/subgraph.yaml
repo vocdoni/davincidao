@@ -8,17 +8,18 @@ indexerHints:
 dataSources:
   - kind: ethereum/contract
     name: DavinciDao
-    network: sepolia
+    network: base
     source:
-      address: "0xbAcEeb16f8eBD4F52d2E6AF4a1FB03224A75D9FC"
+      address: "0x269dD41Bd98696A7c8fDD3cBE4e7ef1aC29d7218"
       abi: DavinciDao
-      startBlock: 9526152
+      startBlock: 37581800
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
       entities:
         - Account
+        - Delegator
         - TokenDelegation
         - CensusRoot
         - GlobalStats

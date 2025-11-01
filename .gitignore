@@ -30,6 +30,7 @@ ehthumbs.db
 Thumbs.db
 dist/
 build/
+subgraph/build/
 
 # Foundry artifacts
 lcov.info

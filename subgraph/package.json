@@ -1,7 +1,7 @@
 {
   "name": "subgraph",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.0.2",
+  "description": "DavinciDAO delegation tracking with unique delegator support",
   "main": "index.js",
   "scripts": {
     "codegen": "graph codegen",

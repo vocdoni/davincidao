@@ -15,6 +15,8 @@ import { formatNumber } from '~/lib/utils'
 import { createCensusReconstructor, unpackLeaf } from '~/lib/census'
 import { TreeVisualizationModal } from '~/components/delegation/TreeVisualizationModal'
 import { ValidateCensusRootModal } from '~/components/delegation/ValidateCensusRootModal'
+import { DelegatorsModal } from '~/components/delegation/DelegatorsModal'
+import { LoadingModal } from '~/components/common/LoadingModal'
 
 // Initialize React Query
 const queryClient = new QueryClient()
@@ -43,6 +45,11 @@ function DashboardContent() {
   const [showNetworkInfo, setShowNetworkInfo] = useState(false)
   const [showCollections, setShowCollections] = useState(false)
   const [showCensusTree, setShowCensusTree] = useState(false)
+  const [showDelegators, setShowDelegators] = useState(false)
+
+  // Delegators modal
+  const [showDelegatorsModal, setShowDelegatorsModal] = useState(false)
+  const [delegatorStats, setDelegatorStats] = useState<{ totalUnique: number; totalActive: number } | null>(null)
 
   // Create contract instance with wallet support
   const contract = useMemo(() => {
@@ -202,6 +209,15 @@ function DashboardContent() {
         const subgraph = getSubgraphClient()
         const weight = await subgraph.getAccountWeight(address)
         setUserWeight(weight)
+
+        // Load global delegator stats
+        const stats = await subgraph.getGlobalStats()
+        if (stats) {
+          setDelegatorStats({
+            totalUnique: parseInt(stats.totalUniqueDelegators),
+            totalActive: parseInt(stats.totalActiveDelegators)
+          })
+        }
       } catch (error) {
         console.warn('Could not get weight from subgraph, defaulting to 0:', error)
         setUserWeight(0)
@@ -266,38 +282,61 @@ function DashboardContent() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-black text-white border-b-2 border-black">
-        <div className="container py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="container py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Left side - Logo and Title */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               {import.meta.env.VITE_APP_AVATAR_URL && (
                 <img
                   src={import.meta.env.VITE_APP_AVATAR_URL}
                   alt="Avatar"
-                  className="w-10 h-10 rounded border border-white"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded border border-white flex-shrink-0"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none'
                   }}
                 />
               )}
-              <div>
-                <h1 className="text-xl font-mono font-bold uppercase tracking-wider">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-sm sm:text-xl font-mono font-bold uppercase tracking-wider truncate">
                   [ {import.meta.env.VITE_APP_TITLE || 'DAVINCIDAO'} ]
                 </h1>
-                <div className="mt-1 text-xs">
+                {/* Contract address - hidden on mobile, compact on tablet */}
+                <div className="hidden sm:block mt-1">
                   <ContractAddress address={CONTRACT_CONFIG.address} />
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Right side - Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => loadInitialData(true)}
                 disabled={loading || !!contractError}
-                className="btn-minimal text-xs"
+                className="btn-minimal text-xs whitespace-nowrap"
               >
                 {loading ? 'LOADING...' : 'REFRESH'}
               </button>
               <WalletButton />
             </div>
+          </div>
+
+          {/* Contract address - mobile only, below title */}
+          <div className="sm:hidden mt-2 text-xs">
+            <span className="text-gray-400 font-mono mr-2">Contract:</span>
+            <code className="bg-white border border-gray-300 px-2 py-1 text-xs font-mono text-black">
+              {CONTRACT_CONFIG.address.slice(0, 6)}...{CONTRACT_CONFIG.address.slice(-4)}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(CONTRACT_CONFIG.address)
+              }}
+              className="ml-2 p-1 text-gray-400 hover:text-white transition-colors"
+              title="Copy address"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
@@ -567,6 +606,60 @@ function DashboardContent() {
                 </div>
               )}
             </div>
+
+            {/* Delegators - Collapsible */}
+            <div className="card overflow-hidden">
+              <button
+                onClick={() => setShowDelegators(!showDelegators)}
+                className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
+              >
+                <span className="text-sm uppercase tracking-wider">[ UNIQUE DELEGATORS ]</span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showDelegators ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showDelegators && (
+                <div className="p-4 border-t border-gray-200 space-y-4">
+                  {/* Stats Display */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 block">
+                      Addresses that delegated NFTs
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center py-3 border border-gray-200 bg-gray-50">
+                        <div className="text-2xl font-mono font-bold terminal-accent">
+                          {delegatorStats?.totalUnique ?? '-'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Total Ever</div>
+                      </div>
+                      <div className="text-center py-3 border border-gray-200 bg-gray-50">
+                        <div className="text-2xl font-mono font-bold">
+                          {delegatorStats?.totalActive ?? '-'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Active Now</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* View Details Button */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <button
+                      onClick={() => setShowDelegatorsModal(true)}
+                      disabled={!delegatorStats}
+                      className="btn-accent w-full text-xs"
+                    >
+                      VIEW ALL DELEGATORS
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Main Content - Appears second on mobile, left on desktop */}
@@ -604,6 +697,18 @@ function DashboardContent() {
         isOpen={showValidateCensusRoot}
         onClose={() => setShowValidateCensusRoot(false)}
         onValidate={handleValidateCensusRoot}
+      />
+
+      {/* Delegators Modal */}
+      <DelegatorsModal
+        isOpen={showDelegatorsModal}
+        onClose={() => setShowDelegatorsModal(false)}
+      />
+
+      {/* Loading Modal - Show during initial NFT discovery */}
+      <LoadingModal
+        isOpen={loading && !hasLoadedOnce}
+        message="DISCOVERING YOUR NFTs..."
       />
     </div>
   )
