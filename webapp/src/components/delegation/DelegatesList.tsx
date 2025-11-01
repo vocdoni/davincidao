@@ -22,14 +22,14 @@ export const DelegatesList = ({
 
   if (delegateArray.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        <div className="mb-2">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="text-center py-8">
+        <div className="mb-3 inline-flex items-center justify-center w-16 h-16 border-2 border-black">
+          <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         </div>
-        <p className="text-sm">No delegates added yet</p>
-        <p className="text-xs text-gray-400 mt-1">Click "Add Delegate" to start delegating your NFTs</p>
+        <p className="text-sm text-gray-600 font-mono">No delegates added yet</p>
+        <p className="text-xs text-gray-500 mt-1">Click "+ ADD" to start delegating your NFTs</p>
       </div>
     )
   }

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Wallet, AlertCircle, Loader2 } from 'lucide-react'
 import { useWallet } from '~/hooks/useWallet'
 import { formatAddress } from '~/lib/utils'
-import { Button } from '~/components/common/Button'
 import { PrivateKeyAuth } from './PrivateKeyAuth'
 import { isWalletConnectAvailable } from '~/lib/appkit'
 
@@ -61,10 +60,10 @@ export const WalletButton = () => {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md">
-          <div className="w-2 h-2 bg-green-500 rounded-full" />
-          <Wallet className="w-4 h-4 text-green-700" />
-          <span className="text-sm font-medium text-green-700">
+        <div className="flex items-center gap-2 px-3 py-2 bg-white border border-black text-black">
+          <div className="w-2 h-2 terminal-accent rounded-full" style={{ backgroundColor: 'hsl(var(--accent))' }} />
+          <Wallet className="w-4 h-4" />
+          <span className="text-xs font-mono font-medium">
             <span className="hidden sm:inline">{formatAddress(address)}</span>
             <span className="sm:hidden">{formatAddress(address, 4, 4)}</span>
           </span>
@@ -72,9 +71,9 @@ export const WalletButton = () => {
         {isWalletConnectAvailable ? (
           <w3m-button />
         ) : (
-          <Button size="sm" variant="outline" onClick={disconnect}>
-            Disconnect
-          </Button>
+          <button className="btn-minimal text-xs" onClick={disconnect}>
+            DISCONNECT
+          </button>
         )}
       </div>
     )
@@ -84,10 +83,10 @@ export const WalletButton = () => {
     <div className="flex flex-col items-center gap-4">
       {/* Connection Error */}
       {connectionError && (
-        <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-md">
+        <div className="mb-2 p-3 bg-gray-100 border border-black">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-sm text-red-700">{connectionError}</span>
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-xs font-mono">{connectionError}</span>
           </div>
         </div>
       )}
@@ -97,9 +96,9 @@ export const WalletButton = () => {
         <div className="flex items-center gap-2">
           <w3m-button />
           {!isConnected && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
-              <AlertCircle className="w-3 h-3 text-blue-600" />
-              <span className="text-blue-700">Full wallet support</span>
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono">
+              <AlertCircle className="w-3 h-3" />
+              <span>Full wallet support</span>
             </div>
           )}
         </div>
@@ -107,37 +106,36 @@ export const WalletButton = () => {
         <div className="flex flex-col items-center gap-4 w-full max-w-sm">
           {/* Traditional Wallet Connection */}
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              className="flex items-center gap-2" 
+            <button
+              className="btn-minimal text-xs flex items-center gap-2"
               onClick={handleConnectWallet}
               disabled={loading}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Connecting...</span>
+                  <span>CONNECTING...</span>
                 </>
               ) : (
                 <>
                   <Wallet className="w-4 h-4" />
-                  <span>Connect Wallet</span>
+                  <span>CONNECT WALLET</span>
                 </>
               )}
-            </Button>
-            <div className="flex items-center gap-1 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-xs">
-              <AlertCircle className="w-3 h-3 text-orange-600" />
-              <span className="text-orange-700">MetaMask only</span>
+            </button>
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono">
+              <AlertCircle className="w-3 h-3" />
+              <span>MetaMask only</span>
             </div>
           </div>
-          
+
           {/* Divider */}
           <div className="flex items-center gap-4 w-full">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-sm text-gray-500">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-gray-300" />
+            <span className="text-xs text-gray-500 font-mono">or</span>
+            <div className="flex-1 h-px bg-gray-300" />
           </div>
-          
+
           {/* Private Key Connection */}
           <PrivateKeyAuth
             onConnect={handlePrivateKeyConnect}

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { DelegateInfo, TransactionPlan, OperationStatus } from '~/types/delegation'
 import { formatAddress } from '~/lib/utils'
-import { Button } from '~/components/common/Button'
 import { UI_CONFIG } from '~/lib/constants'
 
 interface EnhancedPendingChangesProps {
@@ -104,13 +103,13 @@ export const EnhancedPendingChanges = ({
     switch (status) {
       case 'pending':
         return (
-          <div className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-xs font-medium">
+          <div className="w-5 h-5 border border-gray-400 bg-white flex items-center justify-center text-xs font-mono">
             ⏳
           </div>
         )
       case 'executing':
         return (
-          <div className="w-4 h-4 bg-blue-200 text-blue-600 rounded-full flex items-center justify-center">
+          <div className="w-5 h-5 border border-black bg-white flex items-center justify-center">
             <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -119,13 +118,13 @@ export const EnhancedPendingChanges = ({
         )
       case 'completed':
         return (
-          <div className="w-4 h-4 bg-green-200 text-green-600 rounded-full flex items-center justify-center text-xs font-medium">
+          <div className="w-5 h-5 border border-black bg-white flex items-center justify-center text-xs font-mono terminal-accent">
             ✓
           </div>
         )
       case 'failed':
         return (
-          <div className="w-4 h-4 bg-red-200 text-red-600 rounded-full flex items-center justify-center text-xs font-medium">
+          <div className="w-5 h-5 border border-black bg-white flex items-center justify-center text-xs font-mono">
             ✗
           </div>
         )
@@ -137,18 +136,13 @@ export const EnhancedPendingChanges = ({
   }
 
   return (
-    <div className="card p-6 border-orange-200 bg-orange-50">
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0">
-          <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
-        </div>
-        
+    <div className="card overflow-hidden">
+      <div className="card-header">
+        <span className="text-sm uppercase tracking-wider">[ PENDING CHANGES ({changes.length}) ]</span>
+      </div>
+
+      <div className="p-4">
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-orange-800 mb-3">
-            Pending Changes ({changes.length})
-          </h3>
           
           <div className="space-y-2 mb-4">
             {changes.map((delegate) => {
@@ -157,17 +151,17 @@ export const EnhancedPendingChanges = ({
 
               return (
                 <div key={delegate.address}>
-                  <div className="text-sm text-orange-700">
+                  <div className="text-xs font-mono text-gray-700">
                     <span className="font-medium">{formatAddress(delegate.address)}</span>
                     <span className="ml-2">
                       {delegate.currentCount} → {delegate.pendingCount} NFTs
                     </span>
-                    <span className={`ml-2 font-medium ${changeAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="ml-2 font-bold terminal-accent">
                       ({changeAmount > 0 ? '+' : ''}{changeAmount})
                     </span>
                   </div>
                   {exceedsLimit && (
-                    <div className="mt-1 text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                    <div className="mt-1 text-xs font-mono bg-gray-100 border border-black px-2 py-1">
                       ⚠️ Maximum {UI_CONFIG.MAX_TOKENS_PER_TX} tokens per transaction. This will fail due to gas limits.
                       Please reduce to {UI_CONFIG.MAX_TOKENS_PER_TX} or less.
                     </div>
@@ -179,8 +173,8 @@ export const EnhancedPendingChanges = ({
 
           {/* Tree Reconstruction Status */}
           {isTreeReconstructing && (
-            <div className="mb-4 p-3 bg-blue-100 rounded text-sm text-blue-700">
-              <div className="flex items-center gap-2">
+            <div className="mb-4 p-3 border border-black bg-gray-50">
+              <div className="flex items-center gap-2 text-xs font-mono">
                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -192,7 +186,7 @@ export const EnhancedPendingChanges = ({
 
           {/* Transaction Plan */}
           {isCalculating ? (
-            <div className="text-sm text-orange-600">
+            <div className="text-xs font-mono text-gray-600">
               <div className="flex items-center gap-2">
                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -203,7 +197,7 @@ export const EnhancedPendingChanges = ({
             </div>
           ) : plan && plan.operations.length > 0 ? (
             <div>
-              <h4 className="text-sm font-medium text-orange-800 mb-3">
+              <h4 className="text-xs font-mono font-bold uppercase mb-3">
                 Required Operations:
               </h4>
               <div className="space-y-3">
@@ -212,41 +206,40 @@ export const EnhancedPendingChanges = ({
                   const canExecute = canExecuteOperation(index)
                   
                   return (
-                    <div key={operation.id} className="flex items-center gap-3 p-3 bg-white rounded border">
+                    <div key={operation.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200">
                       <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 bg-orange-200 text-orange-800 rounded-full flex items-center justify-center text-xs font-medium">
+                        <span className="w-6 h-6 border border-black flex items-center justify-center text-xs font-mono font-bold">
                           {index + 1}
                         </span>
                         {getStatusIcon(status)}
                       </div>
-                      
+
                       <div className="flex-1">
-                        <div className="text-sm text-orange-700">
+                        <div className="text-xs font-mono text-gray-700">
                           {operation.description}
                         </div>
                         {operation.txHash && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-gray-500 mt-1 font-mono">
                             TX: {operation.txHash.slice(0, 10)}...{operation.txHash.slice(-8)}
                           </div>
                         )}
                         {operation.error && (
-                          <div className="text-xs text-red-600 mt-1">
+                          <div className="text-xs text-gray-700 mt-1 font-mono">
                             Error: {operation.error}
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="flex-shrink-0">
-                        <Button
+                        <button
                           onClick={() => handleExecuteOperation(operation.id)}
                           disabled={!canExecute || status === 'executing'}
-                          size="sm"
-                          variant={status === 'completed' ? 'secondary' : 'default'}
+                          className={`btn-${status === 'completed' ? 'minimal' : 'accent'} text-xs px-2 py-1`}
                         >
-                          {status === 'executing' ? 'Executing...' : 
-                           status === 'completed' ? 'Completed' :
-                           status === 'failed' ? 'Retry' : 'Execute'}
-                        </Button>
+                          {status === 'executing' ? 'EXECUTING...' :
+                           status === 'completed' ? 'COMPLETED' :
+                           status === 'failed' ? 'RETRY' : 'EXECUTE'}
+                        </button>
                       </div>
                     </div>
                   )
@@ -254,7 +247,7 @@ export const EnhancedPendingChanges = ({
               </div>
               
               {plan.requiresProofs && (
-                <div className="mt-3 p-2 bg-orange-100 rounded text-sm text-orange-700">
+                <div className="mt-3 p-2 border border-gray-300 bg-gray-50 text-xs font-mono">
                   <div className="flex items-center gap-2">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -265,7 +258,7 @@ export const EnhancedPendingChanges = ({
               )}
             </div>
           ) : (
-            <div className="text-sm text-orange-600">
+            <div className="text-xs font-mono text-gray-600">
               No operations needed
             </div>
           )}

@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { Key, Eye, EyeOff, AlertTriangle } from 'lucide-react'
-import { Button } from '~/components/common/Button'
 
 interface PrivateKeyAuthProps {
   onConnect: (privateKey: string) => Promise<void>
@@ -33,26 +32,25 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
 
   if (!isExpanded) {
     return (
-      <Button
-        variant="outline"
-        className="flex items-center gap-2"
+      <button
+        className="btn-minimal text-xs flex items-center gap-2"
         onClick={() => setIsExpanded(true)}
       >
         <Key className="w-4 h-4" />
-        <span>Connect with Private Key</span>
-      </Button>
+        <span>CONNECT WITH PRIVATE KEY</span>
+      </button>
     )
   }
 
   return (
     <div className="w-full max-w-md mx-auto">
       {/* Security Warning */}
-      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+      <div className="mb-4 p-3 bg-gray-100 border border-black">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <div className="font-medium text-yellow-800 mb-1">Security Warning</div>
-            <div className="text-yellow-700">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <div className="text-xs font-mono">
+            <div className="font-bold mb-1">Security Warning</div>
+            <div>
               Only use this for testing purposes. Never enter your main wallet's private key on any website.
               This is intended for development and testing with test accounts only.
             </div>
@@ -62,7 +60,7 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-xs font-mono font-bold mb-2 uppercase">
             Private Key (for testing only)
           </label>
           <div className="relative">
@@ -71,45 +69,45 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
               value={privateKey}
               onChange={(e) => setPrivateKey(e.target.value)}
               placeholder="0x1234567890abcdef... or without 0x prefix"
-              className={`w-full px-3 py-2 pr-10 text-sm border rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                error ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              className={`w-full px-3 py-2 pr-10 text-xs border font-mono focus:outline-none focus:ring-1 focus:ring-black ${
+                error ? 'border-black bg-gray-100' : 'border-black bg-white'
               }`}
               disabled={isConnecting}
             />
             <button
               type="button"
               onClick={() => setShowKey(!showKey)}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-black"
               disabled={isConnecting}
             >
               {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          
+
           {privateKey && !isValidPrivateKey(privateKey) && (
-            <div className="mt-1 text-xs text-red-600">
+            <div className="mt-1 text-xs font-mono">
               Invalid private key format. Must be 64 hex characters (with or without 0x prefix).
             </div>
           )}
-          
+
           {error && (
-            <div className="mt-1 text-xs text-red-600">
+            <div className="mt-1 text-xs font-mono">
               {error}
             </div>
           )}
         </div>
 
         <div className="flex gap-2">
-          <Button
+          <button
             type="submit"
             disabled={!privateKey.trim() || !isValidPrivateKey(privateKey) || isConnecting}
-            className="flex-1"
+            className="flex-1 btn-accent text-xs"
           >
-            {isConnecting ? 'Connecting...' : 'Connect'}
-          </Button>
-          <Button
+            {isConnecting ? 'CONNECTING...' : 'CONNECT'}
+          </button>
+          <button
             type="button"
-            variant="outline"
+            className="btn-minimal text-xs"
             onClick={() => {
               setIsExpanded(false)
               setPrivateKey('')
@@ -117,13 +115,13 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
             }}
             disabled={isConnecting}
           >
-            Cancel
-          </Button>
+            CANCEL
+          </button>
         </div>
       </form>
 
-      <div className="mt-4 text-xs text-gray-500">
-        <div className="font-medium mb-1">For testing, you can:</div>
+      <div className="mt-4 text-xs text-gray-500 font-mono">
+        <div className="font-bold mb-1">For testing, you can:</div>
         <ul className="list-disc list-inside space-y-1">
           <li>Use a test account private key from your development environment</li>
           <li>Generate a new test account with tools like Hardhat or Foundry</li>

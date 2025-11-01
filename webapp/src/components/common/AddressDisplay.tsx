@@ -100,10 +100,10 @@ export const AddressDisplay = ({
   return (
     <div className={`inline-flex items-center gap-1 ${className}`}>
       {label && (
-        <span className="text-sm text-gray-600 mr-1">{label}:</span>
+        <span className="text-xs text-gray-400 mr-1 font-mono">{label}:</span>
       )}
 
-      <code className={`bg-gray-100 px-2 py-1 rounded text-xs break-all ${
+      <code className={`bg-white border border-gray-300 px-2 py-1 text-xs break-all text-black ${
         ensName ? 'font-medium' : 'font-mono'
       }`}>
         {ensLoading && showENS ? (
@@ -116,7 +116,7 @@ export const AddressDisplay = ({
           </span>
         ) : (
           <>
-            {ensName && <span className="text-purple-600">{ensName}</span>}
+            {ensName && <span className="terminal-accent font-bold">{ensName}</span>}
             {ensName && ' '}
             {ensName ? (
               <span className="font-mono text-gray-500">({formatAddress(address)})</span>
@@ -126,16 +126,16 @@ export const AddressDisplay = ({
           </>
         )}
       </code>
-      
+
       <div className="flex items-center gap-1 ml-1">
         {copyable && (
           <button
             onClick={handleCopy}
-            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1 text-gray-500 hover:text-black transition-colors"
             title={copied ? 'Copied!' : 'Copy to clipboard'}
           >
             {copied ? (
-              <svg className="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 terminal-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             ) : (
@@ -145,11 +145,11 @@ export const AddressDisplay = ({
             )}
           </button>
         )}
-        
+
         {linkable && explorerUrl && (
           <button
             onClick={handleExplorerClick}
-            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+            className="p-1 text-gray-500 hover:text-black transition-colors"
             title="View on block explorer"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
