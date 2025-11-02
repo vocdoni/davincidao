@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { DavinciDaoContract } from '~/lib/contract'
 import { generateProofs, packLeaf } from '~/lib/merkle'
+import { buildCensusTree } from '~/lib/census/tree'
 import { NFTInfo, CensusData, MerkleTreeNode } from '~/types'
 import {
   DelegateInfo,
@@ -10,6 +11,80 @@ import {
   ProofRequirement
 } from '~/types/delegation'
 import { getSubgraphClient } from '~/lib/subgraph-client'
+
+/**
+ * Validate that the locally reconstructed merkle tree matches the on-chain census root
+ * This MUST be called before executing any transaction to ensure data consistency
+ */
+async function validateCensusRootBeforeTransaction(contract: DavinciDaoContract): Promise<void> {
+  console.log('🔍 PRE-TRANSACTION VALIDATION: Verifying census root...')
+
+  const subgraph = getSubgraphClient()
+
+  // Step 1: Fetch current census root from contract
+  console.log('  ├─ Fetching on-chain census root...')
+  const onChainRoot = await contract.getCensusRoot()
+  const onChainRootHex = '0x' + onChainRoot.toString(16)
+  console.log(`  ├─ On-chain root: ${onChainRootHex}`)
+
+  // Step 2: Fetch all accounts from subgraph
+  console.log('  ├─ Fetching accounts from subgraph...')
+  let skip = 0
+  const pageSize = 100
+  const allAccounts: Array<{ id: string; address: string; weight: string; firstInsertedBlock: string }> = []
+
+  while (true) {
+    const accounts = await subgraph.getAllAccounts(pageSize, skip)
+    if (!accounts || accounts.length === 0) break
+
+    allAccounts.push(...accounts)
+    skip += pageSize
+
+    if (accounts.length < pageSize) break
+  }
+
+  console.log(`  ├─ Found ${allAccounts.length} accounts with weight > 0`)
+
+  // Step 3: Sort accounts by firstInsertedBlock (same as contract insertion order)
+  allAccounts.sort((a, b) => {
+    const blockA = parseInt(a.firstInsertedBlock)
+    const blockB = parseInt(b.firstInsertedBlock)
+    if (blockA !== blockB) return blockA - blockB
+    // If same block, sort by address for determinism
+    return a.id.localeCompare(b.id)
+  })
+
+  // Step 4: Build merkle tree from subgraph data
+  console.log('  ├─ Reconstructing merkle tree...')
+  const accountsForTree = allAccounts.map(acc => ({
+    id: acc.id,
+    address: acc.address.toLowerCase(),
+    weight: acc.weight,
+    lastUpdatedAt: '0', // Not needed for tree building
+    lastUpdatedBlock: acc.firstInsertedBlock
+  }))
+
+  const tree = buildCensusTree(accountsForTree)
+  const computedRootHex = '0x' + tree.root.toString(16)
+  console.log(`  ├─ Computed root: ${computedRootHex}`)
+
+  // Step 5: Verify roots match
+  if (tree.root !== onChainRoot) {
+    console.error('  └─ ❌ ROOT MISMATCH!')
+    console.error(`     On-chain:  ${onChainRootHex}`)
+    console.error(`     Computed:  ${computedRootHex}`)
+    throw new Error(
+      `CRITICAL: Census root mismatch detected!\n\n` +
+      `On-chain root:  ${onChainRootHex}\n` +
+      `Computed root:  ${computedRootHex}\n\n` +
+      `The subgraph data is out of sync with the smart contract. ` +
+      `Please wait for the subgraph to sync, then try again.`
+    )
+  }
+
+  console.log('  └─ ✅ Census root validated successfully!')
+  console.log(`     Tree size: ${tree.size} participants`)
+}
 
 /**
  * Fetch census data from subgraph by querying WeightChanged events in chronological order
@@ -410,6 +485,10 @@ export const useDelegation = (
     setError(null)
 
     try {
+      // CRITICAL: Validate census root before executing any transaction
+      // This ensures our local merkle tree matches the on-chain state
+      await validateCensusRootBeforeTransaction(contract)
+
       let treeData = null
 
       // Generate proofs if needed by fetching census data from subgraph
@@ -821,7 +900,7 @@ export const useDelegation = (
     // Get the current plan to find the operation
     const plan = await calculateTransactionPlan()
     const operation = plan.operations.find(op => op.id === operationId)
-    
+
     if (!operation) {
       throw new Error(`Operation ${operationId} not found`)
     }
@@ -830,6 +909,10 @@ export const useDelegation = (
     setError(null)
 
     try {
+      // CRITICAL: Validate census root before executing any transaction
+      // This ensures our local merkle tree matches the on-chain state
+      await validateCensusRootBeforeTransaction(contract)
+
       let treeData = null
 
       // For single operations, we need to check if THIS operation needs proofs

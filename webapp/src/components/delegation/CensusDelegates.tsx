@@ -64,7 +64,7 @@ export const CensusDelegates = ({ onAddDelegate, existingDelegates = [], refresh
     <>
       <div className="card overflow-hidden">
         <div className="card-header">
-          <span className="text-sm uppercase tracking-wider">[ CURRENT DELEGATES ]</span>
+          <span className="text-sm uppercase tracking-wider">🏆 [ TOP DELEGATES ]</span>
         </div>
 
         <div className="p-4">

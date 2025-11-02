@@ -265,6 +265,25 @@ function DashboardContent() {
     }
   }, [contract, address, hasLoadedOnce, loadInitialData])
 
+  // Reset all state when wallet disconnects
+  useEffect(() => {
+    if (!isConnected) {
+      console.log('Wallet disconnected - resetting app state')
+      setCensusRoot('')
+      setUserWeight(0)
+      setUserNFTs([])
+      setCollections([])
+      setLoading(false)
+      setContractError(null)
+      setHasLoadedOnce(false)
+      setTreeData(null)
+      setDelegatorStats(null)
+      setShowTreeVisualization(false)
+      setShowValidateCensusRoot(false)
+      setShowDelegatorsModal(false)
+      setRefreshTrigger(0)
+    }
+  }, [isConnected])
 
   if (!isConnected) {
     return (
@@ -304,10 +323,6 @@ function DashboardContent() {
                 <h1 className="text-sm sm:text-xl font-mono font-bold uppercase tracking-wider truncate">
                   [ {import.meta.env.VITE_APP_TITLE || 'DAVINCIDAO'} ]
                 </h1>
-                {/* Contract address - hidden on mobile, compact on tablet */}
-                <div className="hidden sm:block mt-1">
-                  <ContractAddress address={CONTRACT_CONFIG.address} />
-                </div>
               </div>
             </div>
 
@@ -322,25 +337,6 @@ function DashboardContent() {
               </button>
               <WalletButton />
             </div>
-          </div>
-
-          {/* Contract address - mobile only, below title */}
-          <div className="sm:hidden mt-2 text-xs">
-            <span className="text-gray-400 font-mono mr-2">Contract:</span>
-            <code className="bg-white border border-gray-300 px-2 py-1 text-xs font-mono text-black">
-              {CONTRACT_CONFIG.address.slice(0, 6)}...{CONTRACT_CONFIG.address.slice(-4)}
-            </code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(CONTRACT_CONFIG.address)
-              }}
-              className="ml-2 p-1 text-gray-400 hover:text-white transition-colors"
-              title="Copy address"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
           </div>
         </div>
       </header>
@@ -426,7 +422,7 @@ function DashboardContent() {
                 onClick={() => setShowNetworkInfo(!showNetworkInfo)}
                 className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
               >
-                <span className="text-sm uppercase tracking-wider">[ NETWORK ]</span>
+                <span className="text-sm uppercase tracking-wider">🌐 [ NETWORK ]</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showNetworkInfo ? 'rotate-180' : ''}`}
                   fill="none"
@@ -459,7 +455,7 @@ function DashboardContent() {
                 onClick={() => setShowCollections(!showCollections)}
                 className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
               >
-                <span className="text-sm uppercase tracking-wider">[ NFT COLLECTIONS ({collections.length}) ]</span>
+                <span className="text-sm uppercase tracking-wider">🖼️ [ NFT COLLECTIONS ({collections.length}) ]</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showCollections ? 'rotate-180' : ''}`}
                   fill="none"
@@ -529,7 +525,7 @@ function DashboardContent() {
                 onClick={() => setShowCensusTree(!showCensusTree)}
                 className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
               >
-                <span className="text-sm uppercase tracking-wider">[ CENSUS TREE ]</span>
+                <span className="text-sm uppercase tracking-wider">🌳 [ CENSUS TREE ]</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showCensusTree ? 'rotate-180' : ''}`}
                   fill="none"
@@ -617,7 +613,7 @@ function DashboardContent() {
                 onClick={() => setShowDelegators(!showDelegators)}
                 className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
               >
-                <span className="text-sm uppercase tracking-wider">[ PARTICIPANTS ]</span>
+                <span className="text-sm uppercase tracking-wider">👥 [ PARTICIPANTS ]</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${showDelegators ? 'rotate-180' : ''}`}
                   fill="none"

@@ -110,7 +110,7 @@ export const DelegatorsModal = ({ isOpen, onClose }: DelegatorsModalProps) => {
           <div className="card-header flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-mono font-bold uppercase tracking-wider">[ PARTICIPANTS ]</h3>
+                <h3 className="text-lg font-mono font-bold uppercase tracking-wider">👥 [ PARTICIPANTS ]</h3>
                 <p className="text-gray-400 mt-1 text-xs normal-case tracking-normal">
                   Unique addresses that have delegated NFTs
                 </p>

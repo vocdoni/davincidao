@@ -4,7 +4,7 @@ import { createAppKit } from '@reown/appkit/react'
 import { CONTRACT_CONFIG, SUPPORTED_NETWORKS } from './constants'
 
 // Get projectId from environment (optional)
-const projectId = import.meta.env.WALLETCONNECT_PROJECT_ID
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
 
 // Only create AppKit if WalletConnect project ID is provided
 let appKit: ReturnType<typeof createAppKit> | null = null

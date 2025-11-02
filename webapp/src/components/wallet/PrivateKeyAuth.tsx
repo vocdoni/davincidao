@@ -45,9 +45,9 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
   return (
     <div className="w-full max-w-md mx-auto">
       {/* Security Warning */}
-      <div className="mb-4 p-3 bg-gray-100 border border-black">
+      <div className="mb-4 p-3 bg-gray-100 border border-black text-gray-900">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-gray-700" />
           <div className="text-xs font-mono">
             <div className="font-bold mb-1">Security Warning</div>
             <div>
@@ -60,7 +60,7 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-mono font-bold mb-2 uppercase">
+          <label className="block text-xs font-mono font-bold mb-2 uppercase text-gray-900">
             Private Key (for testing only)
           </label>
           <div className="relative">
@@ -69,7 +69,7 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
               value={privateKey}
               onChange={(e) => setPrivateKey(e.target.value)}
               placeholder="0x1234567890abcdef... or without 0x prefix"
-              className={`w-full px-3 py-2 pr-10 text-xs border font-mono focus:outline-none focus:ring-1 focus:ring-black ${
+              className={`w-full px-3 py-2 pr-10 text-xs border font-mono focus:outline-none focus:ring-1 focus:ring-black text-gray-900 ${
                 error ? 'border-black bg-gray-100' : 'border-black bg-white'
               }`}
               disabled={isConnecting}
@@ -85,13 +85,13 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
           </div>
 
           {privateKey && !isValidPrivateKey(privateKey) && (
-            <div className="mt-1 text-xs font-mono">
+            <div className="mt-1 text-xs font-mono text-red-600">
               Invalid private key format. Must be 64 hex characters (with or without 0x prefix).
             </div>
           )}
 
           {error && (
-            <div className="mt-1 text-xs font-mono">
+            <div className="mt-1 text-xs font-mono text-red-600">
               {error}
             </div>
           )}
@@ -101,7 +101,7 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
           <button
             type="submit"
             disabled={!privateKey.trim() || !isValidPrivateKey(privateKey) || isConnecting}
-            className="flex-1 btn-accent text-xs"
+            className="flex-1 px-3 py-1.5 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors text-xs disabled:opacity-50"
           >
             {isConnecting ? 'CONNECTING...' : 'CONNECT'}
           </button>
@@ -119,15 +119,6 @@ export function PrivateKeyAuth({ onConnect, isConnecting, error }: PrivateKeyAut
           </button>
         </div>
       </form>
-
-      <div className="mt-4 text-xs text-gray-500 font-mono">
-        <div className="font-bold mb-1">For testing, you can:</div>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Use a test account private key from your development environment</li>
-          <li>Generate a new test account with tools like Hardhat or Foundry</li>
-          <li>Use testnet faucets to fund your test account</li>
-        </ul>
-      </div>
     </div>
   )
 }

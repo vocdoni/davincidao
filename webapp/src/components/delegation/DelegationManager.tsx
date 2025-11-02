@@ -91,7 +91,7 @@ export const DelegationManager = ({
       {/* Delegates List */}
       <div className="card overflow-hidden">
         <div className="card-header flex items-center justify-between">
-          <span className="text-sm uppercase tracking-wider">[ YOUR DELEGATIONS ]</span>
+          <span className="text-sm uppercase tracking-wider">🗳️ [ YOUR DELEGATIONS ]</span>
           <button
             onClick={() => setShowAddDelegate(true)}
             disabled={isLoading || isExecuting}

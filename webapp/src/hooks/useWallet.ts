@@ -161,7 +161,7 @@ export const useWallet = (): WalletState & {
         console.error('Error connecting to injected wallet:', error)
       }
     } else {
-      alert('Please install MetaMask or another Web3 wallet')
+      alert('Please install a Web3 wallet (MetaMask, Coinbase Wallet, Brave Wallet, etc.)')
     }
   }
 
@@ -277,7 +277,7 @@ export const useWallet = (): WalletState & {
           params: [{ chainId: chainIdHex }],
         })
       } catch (error: any) {
-        // This error code indicates that the chain has not been added to MetaMask
+        // This error code indicates that the chain has not been added to the wallet
         if (error.code === 4902) {
           try {
             await window.ethereum.request({

@@ -83,7 +83,7 @@ export const WalletButton = () => {
     <div className="flex flex-col items-center gap-4">
       {/* Connection Error */}
       {connectionError && (
-        <div className="mb-2 p-3 bg-gray-100 border border-black">
+        <div className="mb-2 p-3 bg-gray-100 border border-black text-gray-900">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             <span className="text-xs font-mono">{connectionError}</span>
@@ -96,7 +96,7 @@ export const WalletButton = () => {
         <div className="flex items-center gap-2">
           <w3m-button />
           {!isConnected && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono">
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono text-gray-700">
               <AlertCircle className="w-3 h-3" />
               <span>Full wallet support</span>
             </div>
@@ -123,9 +123,9 @@ export const WalletButton = () => {
                 </>
               )}
             </button>
-            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono">
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 border border-gray-300 text-xs font-mono text-gray-700">
               <AlertCircle className="w-3 h-3" />
-              <span>MetaMask only</span>
+              <span>Injected wallets only</span>
             </div>
           </div>
 

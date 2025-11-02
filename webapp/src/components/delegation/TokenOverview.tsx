@@ -30,7 +30,7 @@ export const TokenOverview = ({
   return (
     <div className="card overflow-hidden">
       <div className="card-header">
-        <span className="text-sm uppercase tracking-wider">[ YOUR TOKENS ]</span>
+        <span className="text-sm uppercase tracking-wider">💎 [ YOUR TOKENS ]</span>
       </div>
 
       <div className="p-4">
