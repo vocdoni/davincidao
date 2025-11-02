@@ -4,9 +4,10 @@ import {
   Undelegated as UndelegatedEvent,
   DelegatedBatch as DelegatedBatchEvent,
   UndelegatedBatch as UndelegatedBatchEvent,
+  WeightChanged as WeightChangedEvent,
   CensusRootUpdated as CensusRootUpdatedEvent
 } from "../generated/DavinciDao/DavinciDao"
-import { Account, Delegator, TokenDelegation, CensusRoot, GlobalStats } from "../generated/schema"
+import { Account, Delegator, TokenDelegation, CensusRoot, GlobalStats, WeightChangeEvent } from "../generated/schema"
 
 // Helper to generate unique ID from transaction
 function idFromTx(txHash: Bytes, logIndex: BigInt): string {
@@ -27,6 +28,7 @@ function loadOrCreateAccount(address: Bytes, timestamp: BigInt, blockNumber: Big
     // Will be set when weight first becomes > 0
     account.firstInsertedBlock = BigInt.fromI32(0)
     account.firstInsertedAt = BigInt.fromI32(0)
+    account.treeIndex = BigInt.fromI32(-1) // -1 means not in tree (weight is 0)
     account.save()
 
     // Update global stats - new account
@@ -74,6 +76,7 @@ function loadOrCreateGlobalStats(timestamp: BigInt): GlobalStats {
     stats.totalUniqueDelegators = BigInt.fromI32(0)
     stats.totalActiveDelegators = BigInt.fromI32(0)
     stats.lastUpdatedAt = timestamp
+    stats.nextTreeIndex = BigInt.fromI32(0)
     stats.save()
   }
 
@@ -507,3 +510,51 @@ export function handleUndelegatedBatch(event: UndelegatedBatchEvent): void {
   stats.lastUpdatedAt = event.block.timestamp
   stats.save()
 }
+
+
+/**
+ * Handle WeightChanged event - CRITICAL for tracking tree insertion order
+ * This event is emitted by the contract in the exact order leaves are inserted/updated/removed
+ */
+export function handleWeightChanged(event: WeightChangedEvent): void {
+  let account = loadOrCreateAccount(event.params.account, event.block.timestamp, event.block.number)
+  let previousWeight = event.params.previousWeight
+  let newWeight = event.params.newWeight
+
+  // Save the weight change event for tree reconstruction
+  let eventId = idFromTx(event.transaction.hash, event.logIndex)
+  let weightChangeEvent = new WeightChangeEvent(eventId)
+  weightChangeEvent.account = account.id
+  weightChangeEvent.previousWeight = BigInt.fromI32(previousWeight.toI32())
+  weightChangeEvent.newWeight = BigInt.fromI32(newWeight.toI32())
+  weightChangeEvent.blockNumber = event.block.number
+  weightChangeEvent.blockTimestamp = event.block.timestamp
+  weightChangeEvent.transactionHash = event.transaction.hash
+  weightChangeEvent.logIndex = event.logIndex
+  weightChangeEvent.save()
+
+  // Update account weight
+  account.weight = BigInt.fromI32(newWeight.toI32())
+  account.lastUpdatedAt = event.block.timestamp
+  account.lastUpdatedBlock = event.block.number
+
+  // Track tree insertion: weight going from 0 to >0 means new leaf inserted
+  if (previousWeight.toI32() == 0 && newWeight.toI32() > 0) {
+    // NEW INSERTION - assign next available tree index
+    let stats = loadOrCreateGlobalStats(event.block.timestamp)
+    account.treeIndex = stats.nextTreeIndex
+    account.firstInsertedBlock = event.block.number
+    account.firstInsertedAt = event.block.timestamp
+
+    // Increment global tree index counter
+    stats.nextTreeIndex = stats.nextTreeIndex.plus(BigInt.fromI32(1))
+    stats.save()
+  } else if (newWeight.toI32() == 0) {
+    // REMOVAL - weight went to 0, leaf removed from tree
+    account.treeIndex = BigInt.fromI32(-1)
+  }
+  // If weight goes from >0 to >0, it is an UPDATE - tree index stays the same
+
+  account.save()
+}
+

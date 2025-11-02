@@ -1,35 +1,33 @@
 import { CensusData } from '~/types'
-import { poseidon2 } from 'poseidon-lite'
 import { LeanIMT } from '@zk-kit/lean-imt'
 
 /**
  * Generate Merkle proofs for addresses in the census tree
  *
+ * IMPORTANT: This function requires the actual replayed tree to be passed in,
+ * not just the list of nodes. The tree may contain empty slots from removed leaves,
+ * and we must generate proofs using the exact tree structure (with gaps).
+ *
+ * @param tree - The actual LeanIMT tree with correct structure (including empty slots)
  * @param censusData - The complete census data with all nodes
  * @param addresses - Array of addresses to generate proofs for
  * @returns Object mapping addresses to their Merkle proof siblings
  */
-export function generateProofs(censusData: CensusData, addresses: string[]): { [address: string]: string[] } {
+export function generateProofs(
+  tree: LeanIMT,
+  censusData: CensusData,
+  addresses: string[]
+): { [address: string]: string[] } {
   console.log('=== Generating proofs ===')
-  console.log('Census data nodes:', censusData.nodes.length)
+  console.log('Tree size:', tree.size)
+  console.log('Active nodes:', censusData.nodes.length)
   console.log('Addresses to generate proofs for:', addresses)
-
-  // Create LeanIMT with Poseidon hash function
-  const tree = new LeanIMT((a, b) => poseidon2([a, b]))
-
-  // Insert all leaves in order
-  for (const node of censusData.nodes) {
-    tree.insert(BigInt(node.leaf))
-  }
 
   const proofs: { [address: string]: string[] } = {}
   for (const address of addresses) {
     console.log(`Looking for address: ${address}`)
 
-    // Debug: show all addresses in the tree
-    const allAddresses = censusData.nodes.map(n => n.address.toLowerCase())
-    console.log('All addresses in tree:', allAddresses)
-
+    // Find the node in census data
     const node = censusData.nodes.find(n => n.address.toLowerCase() === address.toLowerCase())
     console.log(`Found node for ${address}:`, node)
 

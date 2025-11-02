@@ -256,6 +256,31 @@ export const useWallet = (): WalletState & {
     return finalState.chainId !== CONTRACT_CONFIG.chainId
   }, [finalState.isConnected, finalState.chainId])
 
+  // Auto-switch network when wrong network is detected
+  useEffect(() => {
+    if (isWrongNetwork && finalState.isConnected) {
+      console.log('Wrong network detected, attempting automatic switch...')
+
+      // Don't auto-switch for private key wallets (they're always on correct network)
+      if (privateKeyWallet) {
+        return
+      }
+
+      // Attempt automatic switch
+      const attemptAutoSwitch = async () => {
+        try {
+          await switchNetwork()
+          console.log('Successfully switched to correct network')
+        } catch (error) {
+          console.warn('Auto-switch failed, user must switch manually:', error)
+          // Don't disconnect - just show the warning in UI
+        }
+      }
+
+      attemptAutoSwitch()
+    }
+  }, [isWrongNetwork, finalState.isConnected, privateKeyWallet])
+
   // Switch to the correct network (for injected wallets that support EIP-3326)
   const switchNetwork = async () => {
     if (!finalState.isConnected) {

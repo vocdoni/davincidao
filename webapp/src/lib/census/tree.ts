@@ -53,8 +53,12 @@ function poseidonHash(a: bigint, b: bigint): bigint {
 
 /**
  * Build a Lean-IMT tree from accounts fetched from The Graph
- * @param accounts Array of accounts with addresses and weights
+ * @param accounts Array of accounts with addresses and weights (MUST be sorted by firstInsertedBlock)
  * @returns CensusTree object with tree, root, and metadata
+ *
+ * IMPORTANT: The accounts array MUST already be sorted by firstInsertedBlock to match
+ * the contract's tree insertion order. The contract inserts leaves in the order that
+ * WeightChanged events occur (when accounts first receive weight > 0).
  */
 export function buildCensusTree(accounts: Account[]): CensusTree {
   // Create empty tree with Poseidon hash function
@@ -62,16 +66,12 @@ export function buildCensusTree(accounts: Account[]): CensusTree {
 
   const leaves = new Map<string, bigint>();
 
-  // Sort accounts by address for deterministic ordering
-  // This matches the on-chain behavior where accounts are inserted in order
-  const sortedAccounts = [...accounts].sort((a, b) => {
-    const addrA = BigInt(a.address.toLowerCase());
-    const addrB = BigInt(b.address.toLowerCase());
-    return addrA < addrB ? -1 : addrA > addrB ? 1 : 0;
-  });
+  // DO NOT SORT HERE! Accounts must already be sorted by firstInsertedBlock
+  // from the GraphQL query. Tree insertion order MUST match the contract's
+  // insertion order which is based on when WeightChanged events occur.
 
   // Pack and insert each account as a leaf
-  for (const account of sortedAccounts) {
+  for (const account of accounts) {
     const weight = BigInt(account.weight);
 
     // Skip accounts with zero weight

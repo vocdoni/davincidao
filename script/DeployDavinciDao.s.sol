@@ -17,6 +17,7 @@ contract DeployDavinciDao is Script {
         address[] memory collections = new address[](2);
 
         // Default: Use existing test NFT collection
+	/*
         collections[0] = vm.envOr(
             "COLLECTION_ADDRESS",
             address(0x7c61Ae9629664D1CEEc8Abc0fD17CB0866d86d89)
@@ -24,6 +25,17 @@ contract DeployDavinciDao is Script {
         collections[1] = vm.envOr(
             "COLLECTION_ADDRESS",
             address(0x0FaC6B282b1c1dfde72266813175b5f05591BC11)
+        );
+	*/
+
+	// Haberdashery
+        collections[0] = vm.envOr(
+            "COLLECTION_ADDRESS",
+            address(0x980Fbdd1cF05080781Dca0AEf7026B0406743389)
+        );
+        collections[1] = vm.envOr(
+            "COLLECTION_ADDRESS",
+            address(0x85E7DF5708902bE39891d59aBEf8E21EDE91E8BF)
         );
 
 

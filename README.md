@@ -379,3 +379,187 @@ forge coverage
 ## License
 
 MIT License - see LICENSE file for details
+
+## Off-Chain Tree Reconstruction Algorithm
+
+The DavinciDAO contract uses LeanIMT (Lean Incremental Merkle Tree) to maintain the census of voting weights. To verify transactions or generate proofs off-chain, you must reconstruct the tree in a way that **exactly matches** the contract's tree state.
+
+### Why Simple Approaches Fail
+
+**❌ WRONG: Querying current accounts and rebuilding**
+```typescript
+// This will NOT work!
+const accounts = await subgraph.getAccounts() // accounts with weight > 0
+const tree = new LeanIMT()
+for (const acc of accounts) {
+  tree.insert(packLeaf(acc.address, acc.weight))
+}
+// ❌ Root will not match! Missing historical operations
+```
+
+**Problem**: This approach ignores the tree's history. When an account's weight goes to 0, the contract **removes** that leaf from the tree using `LeanIMT._remove()`. This causes the tree to rebalance, changing the structure and indices of remaining leaves. Simply inserting current accounts creates a different tree structure.
+
+**Example**:
+```
+Contract operations:
+1. INSERT Alice weight=3  → tree = [Alice]         (index 0)
+2. INSERT Bob weight=1    → tree = [Alice, Bob]    (indices 0, 1)
+3. INSERT Charlie weight=2 → tree = [Alice, Bob, Charlie]    (indices 0, 1, 2)
+4. REMOVE Bob (weight→0)   → tree = [Alice, EMPTY, Charlie]  (indices 0, 1, 2)
+                             ↑ CRITICAL: Bob's slot stays but becomes 0!
+5. INSERT Dave weight=1    → tree = [Alice, EMPTY, Charlie, Dave]  (indices 0, 1, 2, 3)
+
+If you query current accounts and rebuild:
+1. INSERT Alice weight=3   → tree = [Alice]         (index 0)
+2. INSERT Charlie weight=2 → tree = [Alice, Charlie] (indices 0, 1)
+3. INSERT Dave weight=1    → tree = [Alice, Charlie, Dave] (indices 0, 1, 2)
+                             ↑ WRONG! Dave is at index 2, not 3
+
+The trees have different structures and sizes:
+- Contract tree: size=4, indices=[0, EMPTY, 2, 3]
+- Rebuilt tree:  size=3, indices=[0, 1, 2]
+
+This causes:
+1. Different Merkle roots (tree structure mismatch)
+2. Invalid proofs (indices don't match contract's tree)
+3. ARRAY_RANGE_ERROR when submitting transactions
+```
+
+### ✅ CORRECT: Event Replay Algorithm
+
+The **only** way to reconstruct the tree correctly is to **replay all `WeightChanged` events in chronological order**, performing the exact same operations the contract performed:
+
+```typescript
+// 1. Fetch ALL WeightChanged events in order
+const events = await subgraph.getAllWeightChangeEvents() // Ordered by blockNumber, logIndex
+
+// 2. Create empty tree
+const tree = new LeanIMT((a, b) => poseidon2([a, b]))
+
+// 3. Replay each event
+for (const event of events) {
+  const account = event.account.id
+  const prevWeight = parseInt(event.previousWeight)
+  const newWeight = parseInt(event.newWeight)
+  
+  // Pack leaf: (address << 88) | weight
+  const addr = BigInt(account)
+  const oldLeaf = (addr << 88n) | BigInt(prevWeight)
+  const newLeaf = (addr << 88n) | BigInt(newWeight)
+  
+  if (prevWeight === 0 && newWeight > 0) {
+    // INSERT: New account getting weight
+    tree.insert(newLeaf)
+    
+  } else if (newWeight === 0 && prevWeight > 0) {
+    // REMOVE: Account weight going to 0
+    // IMPORTANT: tree.update(index, 0n) sets the leaf to 0 but KEEPS the slot
+    // The tree size doesn't decrease - it maintains an empty slot at that index
+    const index = tree.indexOf(oldLeaf)
+    tree.update(index, 0n) // Sets to 0, but slot remains (tree size unchanged)
+    
+  } else if (prevWeight > 0 && newWeight > 0) {
+    // UPDATE: Weight change (still > 0)
+    const index = tree.indexOf(oldLeaf)
+    tree.update(index, newLeaf)
+  }
+}
+
+// 4. Tree root now matches contract
+console.log('Tree root:', tree.root)
+```
+
+### Key Requirements
+
+1. **Chronological Order**: Events MUST be processed in the exact order they were emitted
+   - Order by: `blockNumber ASC, logIndex ASC`
+   - The `logIndex` is critical for intra-block ordering
+
+2. **Complete History**: You need ALL `WeightChanged` events, not just current state
+   - The subgraph tracks these in the `WeightChangeEvent` entity
+   - Includes insertions, updates, AND removals
+
+3. **Exact Operations**: Match the contract's operations:
+   - `0 → >0`: INSERT (new leaf)
+   - `>0 → 0`: REMOVE (update to 0, tree rebalances)  
+   - `>0 → >0`: UPDATE (modify existing leaf)
+
+4. **Leaf Packing**: Must match contract's format
+   ```solidity
+   // Contract: (address << 88) | weight
+   uint256 leaf = (uint256(uint160(account)) << 88) | uint256(weight);
+   ```
+
+### Subgraph Schema
+
+The subgraph provides two ways to reconstruct:
+
+```graphql
+# Option 1: Query all weight change events (RECOMMENDED)
+query GetWeightChangeEvents {
+  weightChangeEvents(
+    first: 1000
+    orderBy: blockNumber
+    orderDirection: asc
+  ) {
+    account { id address }
+    previousWeight
+    newWeight
+    blockNumber
+    logIndex
+  }
+}
+
+# Option 2: Query current accounts (ONLY for display, NOT for tree building)
+query GetCurrentAccounts {
+  accounts(where: { weight_gt: "0" }) {
+    id
+    address
+    weight
+  }
+}
+```
+
+### Critical Implementation Details
+
+**Proof Generation**: When generating Merkle proofs, you MUST use the actual replayed tree object, not rebuild from the list of active accounts. The tree object contains the correct structure with empty slots.
+
+```typescript
+// ❌ WRONG: Rebuilding tree from nodes for proof generation
+const tree = new LeanIMT()
+for (const node of activeNodes) {
+  tree.insert(node.leaf)  // This loses empty slots!
+}
+const proof = tree.generateProof(index)  // Invalid proof!
+
+// ✅ CORRECT: Use the tree from event replay
+const tree = await replayEventsToRebuildTree()  // Includes empty slots
+const proof = tree.generateProof(index)  // Valid proof!
+```
+
+**Why**: The tree may have empty slots from removed accounts. When you rebuild from only active accounts, you lose these gaps, creating a different tree structure with wrong indices.
+
+### Implementation Reference
+
+See `webapp/src/hooks/useDelegation.ts` for the complete implementation:
+- `validateCensusRootBeforeTransaction()` - Validates tree reconstruction with event replay
+- `fetchCensusDataFromSubgraph()` - Returns the replayed tree object for proof generation
+- `generateProofs()` in `webapp/src/lib/merkle.ts` - Takes the actual tree as parameter
+
+### Why This Matters
+
+**Security**: Before executing any transaction that requires Merkle proofs (like updating delegations), the webapp MUST verify that its reconstructed tree matches the contract's root. If the roots don't match, the transaction would fail because the proofs would be invalid.
+
+**Correctness**: The entire delegation system relies on accurate Merkle proofs. Using the wrong tree reconstruction method would make it impossible to generate valid proofs, breaking all delegation operations.
+
+### Debugging Mismatches
+
+If you encounter root mismatches:
+
+1. **Check event order**: Ensure events are sorted by `blockNumber`, then `logIndex`
+2. **Verify completeness**: Confirm you're fetching ALL events, not just recent ones
+3. **Log operations**: Print each INSERT/UPDATE/REMOVE to trace tree changes
+4. **Compare sizes**: Contract tree size should match reconstructed tree size
+5. **Check leaf packing**: Verify `(address << 88) | weight` format is correct
+
+The webapp includes detailed console logging when `validateCensusRootBeforeTransaction()` runs - check browser console for debugging information.

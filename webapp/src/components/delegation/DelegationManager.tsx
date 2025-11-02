@@ -139,8 +139,36 @@ export const DelegationManager = ({
       {/* Error Display */}
       {error && (
         <div className="p-4 border-2 border-black bg-white">
-          <div className="text-sm font-mono">
-            <span className="font-bold">ERROR:</span> {error}
+          <div className="space-y-3">
+            <div className="text-sm font-mono whitespace-pre-wrap">
+              {error.startsWith('SYNC_REQUIRED:') ? (
+                <>
+                  <span className="font-bold">⏳ SYNCING:</span> {error.replace('SYNC_REQUIRED:', '')}
+                </>
+              ) : (
+                <>
+                  <span className="font-bold">ERROR:</span> {error}
+                </>
+              )}
+            </div>
+            {error.startsWith('SYNC_REQUIRED:') && (
+              <button
+                onClick={async () => {
+                  try {
+                    const plan = await calculateTransactionPlan()
+                    if (plan.operations.length > 0) {
+                      await executeOperation(plan.operations[0].id)
+                    }
+                  } catch (err) {
+                    console.error('Retry failed:', err)
+                  }
+                }}
+                disabled={isLoading}
+                className="btn-minimal w-full text-xs"
+              >
+                {isLoading ? 'RETRYING...' : 'RETRY'}
+              </button>
+            )}
           </div>
         </div>
       )}

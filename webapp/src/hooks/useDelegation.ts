@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { DavinciDaoContract } from '~/lib/contract'
-import { generateProofs, packLeaf } from '~/lib/merkle'
-import { buildCensusTree } from '~/lib/census/tree'
+import { generateProofs } from '~/lib/merkle'
+// import { buildCensusTree } from '~/lib/census/tree' // Not used - we replay events instead
 import { NFTInfo, CensusData, MerkleTreeNode } from '~/types'
 import {
   DelegateInfo,
@@ -27,58 +27,139 @@ async function validateCensusRootBeforeTransaction(contract: DavinciDaoContract)
   const onChainRootHex = '0x' + onChainRoot.toString(16)
   console.log(`  ├─ On-chain root: ${onChainRootHex}`)
 
-  // Step 2: Fetch all accounts from subgraph
-  console.log('  ├─ Fetching accounts from subgraph...')
-  let skip = 0
-  const pageSize = 100
-  const allAccounts: Array<{ id: string; address: string; weight: string; firstInsertedBlock: string }> = []
+  // Step 1.5: Get the block number when this root was set
+  console.log('  ├─ Fetching block number for current root...')
+  const rootBlockNumber = await contract.getRootBlockNumber(onChainRoot)
+  console.log(`  ├─ Root was set at block: ${rootBlockNumber}`)
 
-  while (true) {
-    const accounts = await subgraph.getAllAccounts(pageSize, skip)
-    if (!accounts || accounts.length === 0) break
+  // Step 1.6: Check subgraph sync status
+  console.log('  ├─ Checking subgraph sync status...')
+  const meta = await subgraph.getMeta()
+  if (meta) {
+    console.log(`  ├─ Subgraph synced to block: ${meta.block.number}`)
+    if (meta.hasIndexingErrors) {
+      console.warn('  ├─ ⚠️  WARNING: Subgraph has indexing errors!')
+    }
 
-    allAccounts.push(...accounts)
-    skip += pageSize
-
-    if (accounts.length < pageSize) break
+    // Check if subgraph has synced past the root block
+    if (BigInt(meta.block.number) < rootBlockNumber) {
+      const blocksBehind = Number(rootBlockNumber - BigInt(meta.block.number))
+      throw new Error(
+        `SYNC_REQUIRED:` +
+        `The delegation data is still syncing (${blocksBehind} blocks behind).\n\n` +
+        `This is normal when you or another user just updated delegations.\n\n` +
+        `Please wait about 1 minute and click "Retry" to try again.`
+      )
+    }
+    console.log('  ├─ ✅ Subgraph is synced (block check passed)')
+  } else {
+    console.warn('  ├─ ⚠️  Could not verify subgraph sync status')
   }
 
-  console.log(`  ├─ Found ${allAccounts.length} accounts with weight > 0`)
+  // Step 2: Fetch all WeightChanged events to replay tree operations
+  console.log('  ├─ Fetching WeightChanged events from subgraph...')
+  let skip = 0
+  const pageSize = 1000
+  const allEvents: Array<{
+    id: string
+    account: { id: string; address: string }
+    previousWeight: string
+    newWeight: string
+    blockNumber: string
+    logIndex: string
+  }> = []
 
-  // Step 3: Sort accounts by firstInsertedBlock (same as contract insertion order)
-  allAccounts.sort((a, b) => {
-    const blockA = parseInt(a.firstInsertedBlock)
-    const blockB = parseInt(b.firstInsertedBlock)
-    if (blockA !== blockB) return blockA - blockB
-    // If same block, sort by address for determinism
-    return a.id.localeCompare(b.id)
-  })
+  while (true) {
+    const events = await subgraph.getAllWeightChangeEvents(pageSize, skip)
+    if (!events || events.length === 0) break
 
-  // Step 4: Build merkle tree from subgraph data
-  console.log('  ├─ Reconstructing merkle tree...')
-  const accountsForTree = allAccounts.map(acc => ({
-    id: acc.id,
-    address: acc.address.toLowerCase(),
-    weight: acc.weight,
-    lastUpdatedAt: '0', // Not needed for tree building
-    lastUpdatedBlock: acc.firstInsertedBlock
-  }))
+    allEvents.push(...events)
+    skip += pageSize
 
-  const tree = buildCensusTree(accountsForTree)
+    if (events.length < pageSize) break
+  }
+
+  console.log(`  ├─ Found ${allEvents.length} WeightChanged events`)
+
+  // Step 3: Replay events to build tree exactly as contract did
+  console.log('  ├─ Replaying events to reconstruct tree...')
+
+  // Import LeanIMT and Poseidon
+  const { LeanIMT } = await import('@zk-kit/lean-imt')
+  const { poseidon2 } = await import('poseidon-lite')
+
+  // Create tree with Poseidon hash
+  const tree = new LeanIMT((a: bigint, b: bigint) => poseidon2([a, b]))
+
+  // Track current weights for each account
+  const currentWeights = new Map<string, number>()
+
+  // Replay each event in order
+  for (const event of allEvents) {
+    const account = event.account.id.toLowerCase()
+    const prevWeight = parseInt(event.previousWeight)
+    const newWeight = parseInt(event.newWeight)
+
+    // Pack leaf value: (address << 88) | weight
+    const addr = BigInt(account)
+    const oldLeaf = (addr << 88n) | BigInt(prevWeight)
+    const newLeaf = (addr << 88n) | BigInt(newWeight)
+
+    if (prevWeight === 0 && newWeight > 0) {
+      // INSERT: weight 0 -> >0
+      tree.insert(newLeaf)
+      currentWeights.set(account, newWeight)
+      console.log(`  │   INSERT ${account} weight=${newWeight} (tree size: ${tree.size})`)
+    } else if (newWeight === 0 && prevWeight > 0) {
+      // REMOVE: weight >0 -> 0
+      // In LeanIMT, removal is done by updating the leaf to 0
+      // The tree will compact and rebalance automatically
+      const index = tree.indexOf(oldLeaf)
+      if (index !== -1) {
+        tree.update(index, 0n)
+        currentWeights.delete(account)
+        console.log(`  │   REMOVE ${account} at index ${index} (tree size: ${tree.size})`)
+      } else {
+        console.warn(`  │   ⚠️  Could not find leaf to remove: ${account} oldLeaf=${oldLeaf}`)
+      }
+    } else if (prevWeight > 0 && newWeight > 0) {
+      // UPDATE: weight >0 -> >0 (different)
+      const index = tree.indexOf(oldLeaf)
+      if (index !== -1) {
+        tree.update(index, newLeaf)
+        currentWeights.set(account, newWeight)
+        console.log(`  │   UPDATE ${account} weight ${prevWeight}->${newWeight} at index ${index}`)
+      } else {
+        console.warn(`  │   ⚠️  Could not find leaf to update: ${account} oldLeaf=${oldLeaf}`)
+      }
+    }
+  }
+
   const computedRootHex = '0x' + tree.root.toString(16)
   console.log(`  ├─ Computed root: ${computedRootHex}`)
+  console.log(`  ├─ Tree size: ${tree.size} participants`)
+  console.log(`  ├─ Active accounts: ${currentWeights.size}`)
 
   // Step 5: Verify roots match
   if (tree.root !== onChainRoot) {
     console.error('  └─ ❌ ROOT MISMATCH!')
     console.error(`     On-chain:  ${onChainRootHex}`)
     console.error(`     Computed:  ${computedRootHex}`)
+
+    // Check if this might be a sync issue
+    const syncStatus = meta ? `block ${meta.block.number}` : 'unknown'
+
     throw new Error(
-      `CRITICAL: Census root mismatch detected!\n\n` +
-      `On-chain root:  ${onChainRootHex}\n` +
-      `Computed root:  ${computedRootHex}\n\n` +
-      `The subgraph data is out of sync with the smart contract. ` +
-      `Please wait for the subgraph to sync, then try again.`
+      `SYNC_REQUIRED:` +
+      `The delegation data is still syncing. This is normal and happens when:\n` +
+      `• You or another user just updated delegations\n` +
+      `• The subgraph is processing recent transactions\n\n` +
+      `Current status:\n` +
+      `• On-chain root: ${onChainRootHex}\n` +
+      `• Subgraph synced to: ${syncStatus}\n` +
+      `• Root was set at block: ${rootBlockNumber}\n\n` +
+      `Please wait about 1 minute and click "Retry" to try again.\n` +
+      `The subgraph typically syncs within 30-60 seconds.`
     )
   }
 
@@ -87,64 +168,94 @@ async function validateCensusRootBeforeTransaction(contract: DavinciDaoContract)
 }
 
 /**
- * Fetch census data from subgraph by querying WeightChanged events in chronological order
- * This ensures we rebuild the tree in the same order as the contract built it
+ * Fetch census data from subgraph by replaying WeightChanged events
+ * This rebuilds the tree EXACTLY as the contract did, with correct indices
  */
 async function fetchCensusDataFromSubgraph(contract: DavinciDaoContract): Promise<CensusData> {
   console.log('Fetching census data from subgraph by replaying WeightChanged events...')
   const subgraph = getSubgraphClient()
 
+  // Fetch ALL WeightChanged events
   let skip = 0
-  const pageSize = 100
-
-  // Query all accounts that have current weight > 0
-  // The subgraph now tracks firstInsertedBlock for correct tree order
-  const allAccounts: Array<{ id: string; address: string; weight: string; firstInsertedBlock: string }> = []
+  const pageSize = 1000
+  const allEvents: Array<{
+    id: string
+    account: { id: string; address: string }
+    previousWeight: string
+    newWeight: string
+    blockNumber: string
+    logIndex: string
+  }> = []
 
   while (true) {
-    const accounts = await subgraph.getAllAccounts(pageSize, skip)
+    const events = await subgraph.getAllWeightChangeEvents(pageSize, skip)
+    if (!events || events.length === 0) break
 
-    if (!accounts || accounts.length === 0) {
-      break
-    }
-
-    allAccounts.push(...accounts)
+    allEvents.push(...events)
     skip += pageSize
 
-    if (accounts.length < pageSize) {
-      break
+    if (events.length < pageSize) break
+  }
+
+  console.log(`Fetched ${allEvents.length} WeightChanged events for tree replay`)
+
+  // Replay events to build tree
+  const { LeanIMT } = await import('@zk-kit/lean-imt')
+  const { poseidon2 } = await import('poseidon-lite')
+
+  const tree = new LeanIMT((a: bigint, b: bigint) => poseidon2([a, b]))
+  const accountData = new Map<string, { weight: number; leaf: bigint }>()
+
+  // Replay each event
+  for (const event of allEvents) {
+    const account = event.account.id.toLowerCase()
+    const prevWeight = parseInt(event.previousWeight)
+    const newWeight = parseInt(event.newWeight)
+
+    const addr = BigInt(account)
+    const oldLeaf = (addr << 88n) | BigInt(prevWeight)
+    const newLeaf = (addr << 88n) | BigInt(newWeight)
+
+    if (prevWeight === 0 && newWeight > 0) {
+      // INSERT
+      tree.insert(newLeaf)
+      accountData.set(account, { weight: newWeight, leaf: newLeaf })
+    } else if (newWeight === 0 && prevWeight > 0) {
+      // REMOVE
+      const index = tree.indexOf(oldLeaf)
+      if (index !== -1) {
+        tree.update(index, 0n)
+        accountData.delete(account)
+      }
+    } else if (prevWeight > 0 && newWeight > 0) {
+      // UPDATE
+      const index = tree.indexOf(oldLeaf)
+      if (index !== -1) {
+        tree.update(index, newLeaf)
+        accountData.set(account, { weight: newWeight, leaf: newLeaf })
+      }
     }
   }
 
-  console.log(`Fetched ${allAccounts.length} accounts from subgraph`)
-
-  // Sort by firstInsertedBlock to match contract tree insertion order
-  // This is the block when each account first got weight > 0
-  allAccounts.sort((a, b) => {
-    const blockA = parseInt(a.firstInsertedBlock)
-    const blockB = parseInt(b.firstInsertedBlock)
-    if (blockA !== blockB) {
-      return blockA - blockB
+  // Build nodes array with ACTUAL indices from the replayed tree
+  const nodes: MerkleTreeNode[] = []
+  for (const [address, data] of accountData.entries()) {
+    const index = tree.indexOf(data.leaf)
+    if (index !== -1) {
+      nodes.push({
+        index,
+        address,
+        weight: data.weight,
+        leaf: data.leaf.toString()
+      })
     }
-    // If same block, sort by address for determinism
-    return a.id.localeCompare(b.id)
-  })
+  }
 
-  // Convert accounts to MerkleTreeNode format with index in insertion order
-  const nodes: MerkleTreeNode[] = allAccounts.map((account, index) => {
-    const address = account.id
-    const weight = parseInt(account.weight)
-    const leaf = packLeaf(address, weight)
-
-    return {
-      index,
-      address,
-      weight,
-      leaf
-    }
-  })
+  // Sort by index for consistency
+  nodes.sort((a, b) => a.index - b.index)
 
   console.log('Tree node order (first 10):', nodes.slice(0, 10).map(n => n.address))
+  console.log('Tree size:', tree.size, 'Active accounts:', nodes.length)
 
   // Get current census root
   const root = await contract.getCensusRoot()
@@ -152,7 +263,8 @@ async function fetchCensusDataFromSubgraph(contract: DavinciDaoContract): Promis
   return {
     root: root.toString(),
     nodes,
-    totalParticipants: nodes.length
+    totalParticipants: nodes.length,
+    tree  // IMPORTANT: Return the actual tree so proofs can be generated correctly
   }
 }
 
@@ -530,7 +642,7 @@ export const useDelegation = (
               const accountNode = treeData.nodes.find(n => n.address.toLowerCase() === operation.to!.toLowerCase())
               currentWeight = accountNode?.weight || 0
               if (currentWeight > 0) {
-                const proofs = generateProofs(treeData, [operation.to!])
+                const proofs = generateProofs(treeData.tree, treeData, [operation.to!])
                 proof = proofs[operation.to!] || []
               }
             }
@@ -564,7 +676,7 @@ export const useDelegation = (
             const currentWeight = await subgraph.getAccountWeight(operation.from)
 
             if (treeData) {
-              const proofs = generateProofs(treeData, [operation.from])
+              const proofs = generateProofs(treeData.tree, treeData, [operation.from])
               const proof = proofs[operation.from] || []
               fromProofs.push({
                 account: operation.from,
@@ -603,7 +715,7 @@ export const useDelegation = (
             }
 
             if (treeData && fromDelegates.length > 0) {
-              const proofs = generateProofs(treeData, fromDelegates)
+              const proofs = generateProofs(treeData.tree, treeData, fromDelegates)
               for (const delegate of fromDelegates) {
                 const proof = proofs[delegate] || []
                 fromProofs.push({
@@ -619,7 +731,7 @@ export const useDelegation = (
             if (treeData) {
               const currentWeight = await contract.getWeightOf(operation.to)
               if (currentWeight > 0) {
-                const proofs = generateProofs(treeData, [operation.to])
+                const proofs = generateProofs(treeData.tree, treeData, [operation.to])
                 toProof = proofs[operation.to] || []
               }
             }
@@ -995,7 +1107,7 @@ export const useDelegation = (
             currentWeight = accountNode?.weight || 0
             console.log(`Current weight for ${operation.to}: ${currentWeight}`)
             if (currentWeight > 0) {
-              const proofs = generateProofs(treeData, [operation.to!])
+              const proofs = generateProofs(treeData.tree, treeData, [operation.to!])
               proof = proofs[operation.to!] || []
               console.log(`Generated proof for ${operation.to}:`, proof)
 
@@ -1054,7 +1166,7 @@ export const useDelegation = (
           const currentWeight = await subgraph.getAccountWeight(operation.from)
 
           if (treeData) {
-            const proofs = generateProofs(treeData, [operation.from])
+            const proofs = generateProofs(treeData.tree, treeData, [operation.from])
             const proof = proofs[operation.from] || []
             fromProofs.push({
               account: operation.from,
@@ -1101,7 +1213,7 @@ export const useDelegation = (
           }
 
           if (treeData && fromDelegates.length > 0) {
-            const proofs = generateProofs(treeData, fromDelegates)
+            const proofs = generateProofs(treeData.tree, treeData, fromDelegates)
             for (const delegate of fromDelegates) {
               const proof = proofs[delegate] || []
               fromProofs.push({
@@ -1117,7 +1229,7 @@ export const useDelegation = (
           if (treeData) {
             const currentWeight = await contract.getWeightOf(operation.to)
             if (currentWeight > 0) {
-              const proofs = generateProofs(treeData, [operation.to])
+              const proofs = generateProofs(treeData.tree, treeData, [operation.to])
               toProof = proofs[operation.to] || []
             }
           }

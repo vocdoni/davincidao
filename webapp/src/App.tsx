@@ -5,7 +5,7 @@ import { WalletButton } from '~/components/wallet/WalletButton'
 import { ErrorBoundary } from '~/components/ErrorBoundary'
 import { useWallet } from '~/hooks/useWallet'
 import { DavinciDaoContract } from '~/lib/contract'
-import { CONTRACT_CONFIG } from '~/lib/constants'
+import { CONTRACT_CONFIG, SUPPORTED_NETWORKS } from '~/lib/constants'
 import { initSubgraphClient, getSubgraphClient } from '~/lib/subgraph-client'
 import { DelegationManager } from '~/components/delegation/DelegationManager'
 import { NFTInfo, Collection, CensusData, MerkleTreeNode } from '~/types'
@@ -20,6 +20,12 @@ import { LoadingModal } from '~/components/common/LoadingModal'
 
 // Initialize React Query
 const queryClient = new QueryClient()
+
+// Helper to get network name
+function getNetworkName(chainId: number): string {
+  const network = SUPPORTED_NETWORKS[chainId as keyof typeof SUPPORTED_NETWORKS]
+  return network ? network.name : `Chain ${chainId}`
+}
 
 function DashboardContent() {
   const walletState = useWallet()
@@ -69,40 +75,74 @@ function DashboardContent() {
 
   // Initialize required services on app startup
   useEffect(() => {
-    console.log('=== DavinciDAO V2 Initialization ===')
+    const initializeApp = async () => {
+      console.log('=== DavinciDAO V2 Initialization ===')
 
-    // Check Alchemy API key
-    const alchemyKey = import.meta.env.VITE_ALCHEMY_API_KEY
-    if (!alchemyKey) {
-      console.error('❌ CRITICAL: VITE_ALCHEMY_API_KEY not configured')
-      console.error('DavinciDAO V2 requires Alchemy API for NFT discovery')
-      console.error('Please add VITE_ALCHEMY_API_KEY to your .env file')
-      setContractError('Missing VITE_ALCHEMY_API_KEY in configuration. Cannot discover NFTs.')
-      return
+      // Check Alchemy API key
+      const alchemyKey = import.meta.env.VITE_ALCHEMY_API_KEY
+      if (!alchemyKey) {
+        console.error('❌ CRITICAL: VITE_ALCHEMY_API_KEY not configured')
+        console.error('DavinciDAO V2 requires Alchemy API for NFT discovery')
+        console.error('Please add VITE_ALCHEMY_API_KEY to your .env file')
+        setContractError('Missing VITE_ALCHEMY_API_KEY in configuration. Cannot discover NFTs.')
+        return
+      }
+      console.log('✓ Alchemy API key configured')
+
+      // Check Subgraph endpoint
+      const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
+      if (!subgraphEndpoint) {
+        console.error('❌ CRITICAL: VITE_SUBGRAPH_ENDPOINT not configured')
+        console.error('DavinciDAO V2 requires The Graph subgraph for delegation data')
+        console.error('Please add VITE_SUBGRAPH_ENDPOINT to your .env file')
+        setContractError('Missing VITE_SUBGRAPH_ENDPOINT in configuration. Cannot query delegation data.')
+        return
+      }
+
+      // Initialize subgraph client
+      try {
+        initSubgraphClient(subgraphEndpoint)
+        console.log('✓ Subgraph client initialized:', subgraphEndpoint)
+      } catch (error) {
+        console.error('❌ Failed to initialize subgraph client:', error)
+        setContractError('Failed to initialize subgraph client. Please check VITE_SUBGRAPH_ENDPOINT.')
+        return
+      }
+
+      // Validate RPC URL and chain ID match
+      try {
+        console.log('Validating RPC configuration...')
+        const testProvider = new (await import('ethers')).JsonRpcProvider(CONTRACT_CONFIG.rpcUrl)
+        const network = await testProvider.getNetwork()
+        const actualChainId = Number(network.chainId)
+
+        if (actualChainId !== CONTRACT_CONFIG.chainId) {
+          console.error('❌ CRITICAL: RPC chain ID mismatch')
+          console.error(`RPC URL (${CONTRACT_CONFIG.rpcUrl}) returns chain ID ${actualChainId}`)
+          console.error(`But VITE_CHAIN_ID is configured as ${CONTRACT_CONFIG.chainId}`)
+          const actualNetwork = getNetworkName(actualChainId)
+          const expectedNetwork = getNetworkName(CONTRACT_CONFIG.chainId)
+          setContractError(
+            `Configuration mismatch: Your RPC URL connects to ${actualNetwork} (Chain ID: ${actualChainId}), ` +
+            `but the app is configured for ${expectedNetwork} (Chain ID: ${CONTRACT_CONFIG.chainId}). ` +
+            `Please update VITE_RPC_URL and VITE_CHAIN_ID in your .env file to match the same network.`
+          )
+          return
+        }
+        console.log(`✓ RPC validated: Chain ID ${actualChainId} matches configuration`)
+      } catch (error) {
+        console.error('❌ Failed to validate RPC URL:', error)
+        setContractError(
+          `Failed to connect to RPC URL: ${CONTRACT_CONFIG.rpcUrl}. ` +
+          `Please check VITE_RPC_URL in your .env file.`
+        )
+        return
+      }
+
+      console.log('✓ All required services initialized')
     }
-    console.log('✓ Alchemy API key configured')
 
-    // Check Subgraph endpoint
-    const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
-    if (!subgraphEndpoint) {
-      console.error('❌ CRITICAL: VITE_SUBGRAPH_ENDPOINT not configured')
-      console.error('DavinciDAO V2 requires The Graph subgraph for delegation data')
-      console.error('Please add VITE_SUBGRAPH_ENDPOINT to your .env file')
-      setContractError('Missing VITE_SUBGRAPH_ENDPOINT in configuration. Cannot query delegation data.')
-      return
-    }
-
-    // Initialize subgraph client
-    try {
-      initSubgraphClient(subgraphEndpoint)
-      console.log('✓ Subgraph client initialized:', subgraphEndpoint)
-    } catch (error) {
-      console.error('❌ Failed to initialize subgraph client:', error)
-      setContractError('Failed to initialize subgraph client. Please check VITE_SUBGRAPH_ENDPOINT.')
-      return
-    }
-
-    console.log('✓ All required services initialized')
+    initializeApp()
   }, [])
 
   // Refresh only the census root from the contract
@@ -164,7 +204,8 @@ function DashboardContent() {
       const censusData: CensusData = {
         root: '0x' + tree.root.toString(16),
         nodes,
-        totalParticipants: tree.size
+        totalParticipants: tree.size,
+        tree: tree.tree  // Include the actual LeanIMT instance
       }
 
       // Update state with tree data
@@ -194,6 +235,20 @@ function DashboardContent() {
 
   const loadInitialData = useCallback(async (forceRefresh = false) => {
     if (!contract || !address) return
+
+    // Block all contract operations if on wrong network
+    if (isWrongNetwork) {
+      console.warn('Cannot load data: connected to wrong network')
+      const expectedNetwork = getNetworkName(CONTRACT_CONFIG.chainId)
+      const currentChainId = walletState.chainId
+      const currentNetwork = currentChainId ? getNetworkName(currentChainId) : 'Unknown'
+      setContractError(
+        `Wrong network detected. Please switch from ${currentNetwork} to ${expectedNetwork} (Chain ID: ${CONTRACT_CONFIG.chainId}). ` +
+        `You can switch networks in your wallet or wait for automatic switching.`
+      )
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     setContractError(null)
@@ -242,21 +297,30 @@ function DashboardContent() {
       const errorObj = error as { code?: string; data?: unknown; message?: string }
       
       // Set user-friendly error message
+      const networkName = getNetworkName(CONTRACT_CONFIG.chainId)
       if (errorObj.code === 'CALL_EXCEPTION') {
         if (errorObj.data === null || errorObj.data === '0x') {
-          setContractError(`No contract deployed at address ${CONTRACT_CONFIG.address}. Please verify the contract is deployed on the current network.`)
+          setContractError(
+            `No contract found at ${CONTRACT_CONFIG.address} on ${networkName}. ` +
+            `Please verify: (1) The contract is deployed on ${networkName}, ` +
+            `(2) VITE_CONTRACT_ADDRESS in your .env file is correct, and ` +
+            `(3) You're connected to the right network (Chain ID: ${CONTRACT_CONFIG.chainId}).`
+          )
         } else {
-          setContractError('Contract call failed. Please check if the contract is deployed and accessible.')
+          setContractError(
+            `Contract call failed on ${networkName}. ` +
+            `Please verify the contract at ${CONTRACT_CONFIG.address} is deployed and accessible.`
+          )
         }
       } else if (errorObj.message?.includes('No contract deployed at address')) {
-        setContractError(errorObj.message)
+        setContractError(`${errorObj.message} on ${networkName}`)
       } else {
-        setContractError(`Failed to load contract data: ${errorObj.message || 'Unknown error'}`)
+        setContractError(`Failed to load contract data from ${networkName}: ${errorObj.message || 'Unknown error'}`)
       }
     } finally {
       setLoading(false)
     }
-  }, [contract, address])
+  }, [contract, address, isWrongNetwork])
 
   // Load initial data when wallet connects (only once per connection)
   useEffect(() => {

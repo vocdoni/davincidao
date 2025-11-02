@@ -6,6 +6,9 @@ export interface Account {
   weight: string;
   lastUpdatedAt: string;
   lastUpdatedBlock: string;
+  firstInsertedBlock: string;
+  firstInsertedAt: string;
+  treeIndex: string;
 }
 
 export interface CensusData {
@@ -18,7 +21,7 @@ const ACCOUNTS_QUERY = gql`
     accounts(
       first: $first
       skip: $skip
-      orderBy: id
+      orderBy: treeIndex
       orderDirection: asc
       where: { weight_gt: "0" }
     ) {
@@ -27,6 +30,9 @@ const ACCOUNTS_QUERY = gql`
       weight
       lastUpdatedAt
       lastUpdatedBlock
+      firstInsertedBlock
+      firstInsertedAt
+      treeIndex
     }
   }
 `;
@@ -142,6 +148,9 @@ export class SubgraphClient {
           weight
           lastUpdatedAt
           lastUpdatedBlock
+          firstInsertedBlock
+          firstInsertedAt
+          treeIndex
         }
       }
     `;

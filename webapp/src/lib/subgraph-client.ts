@@ -13,6 +13,7 @@ interface SubgraphAccount {
   lastUpdatedBlock: string
   firstInsertedBlock: string
   firstInsertedAt: string
+  treeIndex: string
 }
 
 interface SubgraphTokenDelegation {
@@ -43,6 +44,39 @@ export interface SubgraphDelegator {
   firstDelegatedBlock: string
   lastDelegatedAt: string
   lastDelegatedBlock: string
+}
+
+interface SubgraphCensusRoot {
+  id: string
+  root: string
+  updater: string
+  blockNumber: string
+  blockTimestamp: string
+  transactionHash: string
+}
+
+interface SubgraphWeightChangeEvent {
+  id: string
+  account: {
+    id: string
+    address: string
+  }
+  previousWeight: string
+  newWeight: string
+  blockNumber: string
+  blockTimestamp: string
+  transactionHash: string
+  logIndex: string
+}
+
+interface SubgraphMeta {
+  block: {
+    number: number
+    hash: string
+    timestamp: number
+  }
+  deployment: string
+  hasIndexingErrors: boolean
 }
 
 export class SubgraphClient {
@@ -110,15 +144,24 @@ export class SubgraphClient {
 
   /**
    * Get all accounts with their weights
+   * @param first - Number of accounts to fetch
+   * @param skip - Number of accounts to skip
+   * @param orderBy - Field to order by ('weight' for display, 'treeIndex' for tree reconstruction)
    */
-  async getAllAccounts(first: number = 100, skip: number = 0): Promise<SubgraphAccount[]> {
+  async getAllAccounts(
+    first: number = 100,
+    skip: number = 0,
+    orderBy: 'weight' | 'treeIndex' = 'weight'
+  ): Promise<SubgraphAccount[]> {
+    const orderDirection = orderBy === 'weight' ? 'desc' : 'asc'
+
     const query = `
-      query GetAccounts($first: Int!, $skip: Int!) {
+      query GetAccounts($first: Int!, $skip: Int!, $orderBy: Account_orderBy!, $orderDirection: OrderDirection!) {
         accounts(
           first: $first
           skip: $skip
-          orderBy: weight
-          orderDirection: desc
+          orderBy: $orderBy
+          orderDirection: $orderDirection
           where: { weight_gt: "0" }
         ) {
           id
@@ -128,15 +171,21 @@ export class SubgraphClient {
           lastUpdatedBlock
           firstInsertedBlock
           firstInsertedAt
+          treeIndex
         }
       }
     `
 
     const data = await this.query<{ accounts: SubgraphAccount[] }>(
       query,
-      { first, skip }
+      { first, skip, orderBy, orderDirection }
     )
 
+    // IMPORTANT: When ordering by treeIndex for tree reconstruction,
+    // we must handle the fact that tree indices may have gaps (when accounts are removed).
+    // LeanIMT removes leaves but doesn't re-index, so we need to sort by treeIndex
+    // but the tree will be rebuilt with sequential indices 0, 1, 2, ...
+    // This is correct because we're only including accounts with weight > 0.
     return data.accounts
   }
 
@@ -346,6 +395,129 @@ export class SubgraphClient {
     )
 
     return data.accounts
+  }
+
+  /**
+   * Get subgraph metadata including current sync block
+   */
+  async getMeta(): Promise<SubgraphMeta | null> {
+    const query = `
+      query GetMeta {
+        _meta {
+          block {
+            number
+            hash
+            timestamp
+          }
+          deployment
+          hasIndexingErrors
+        }
+      }
+    `
+
+    try {
+      const data = await this.query<{ _meta: SubgraphMeta }>(query)
+      return data._meta
+    } catch (error) {
+      console.warn('Failed to get subgraph metadata:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get the latest census root entity from subgraph
+   */
+  async getLatestCensusRoot(): Promise<SubgraphCensusRoot | null> {
+    const query = `
+      query GetLatestCensusRoot {
+        censusRoots(
+          first: 1
+          orderBy: blockNumber
+          orderDirection: desc
+        ) {
+          id
+          root
+          updater
+          blockNumber
+          blockTimestamp
+          transactionHash
+        }
+      }
+    `
+
+    const data = await this.query<{ censusRoots: SubgraphCensusRoot[] }>(query)
+    return data.censusRoots.length > 0 ? data.censusRoots[0] : null
+  }
+
+  /**
+   * Get a specific census root by root value
+   */
+  async getCensusRootByValue(rootValue: string): Promise<SubgraphCensusRoot | null> {
+    const query = `
+      query GetCensusRootByValue($root: BigInt!) {
+        censusRoots(where: { root: $root }) {
+          id
+          root
+          updater
+          blockNumber
+          blockTimestamp
+          transactionHash
+        }
+      }
+    `
+
+    const data = await this.query<{ censusRoots: SubgraphCensusRoot[] }>(
+      query,
+      { root: rootValue }
+    )
+    return data.censusRoots.length > 0 ? data.censusRoots[0] : null
+  }
+
+  /**
+   * Check if subgraph has synced past a specific block number
+   */
+  async hasSyncedPastBlock(blockNumber: number): Promise<boolean> {
+    const meta = await this.getMeta()
+    if (!meta) {
+      console.warn('Could not get subgraph metadata to check sync status')
+      return false
+    }
+    return meta.block.number >= blockNumber
+  }
+
+  /**
+   * Get all weight change events in chronological order for tree reconstruction
+   */
+  async getAllWeightChangeEvents(first: number = 1000, skip: number = 0): Promise<SubgraphWeightChangeEvent[]> {
+    const query = `
+      query GetWeightChangeEvents($first: Int!, $skip: Int!) {
+        weightChangeEvents(
+          first: $first
+          skip: $skip
+          orderBy: blockNumber
+          orderDirection: asc
+        ) {
+          id
+          account {
+            id
+            address
+          }
+          previousWeight
+          newWeight
+          blockNumber
+          blockTimestamp
+          transactionHash
+          logIndex
+        }
+      }
+    `
+
+    const data = await this.query<{ weightChangeEvents: SubgraphWeightChangeEvent[] }>(
+      query,
+      { first, skip }
+    )
+
+    return data.weightChangeEvents
   }
 
   /**

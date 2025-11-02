@@ -35,6 +35,8 @@ dataSources:
           handler: handleDelegatedBatch
         - event: UndelegatedBatch(indexed address,indexed address,indexed uint256,uint256[])
           handler: handleUndelegatedBatch
+        - event: WeightChanged(indexed address,uint88,uint88)
+          handler: handleWeightChanged
         - event: CensusRootUpdated(indexed uint256,uint256)
           handler: handleCensusRootUpdated
       file: ./src/mapping.ts
