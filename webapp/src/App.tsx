@@ -233,6 +233,9 @@ function DashboardContent() {
       setUserNFTs(nfts)
 
       setHasLoadedOnce(true)
+
+      // Trigger refresh for components that depend on global data
+      setRefreshTrigger(prev => prev + 1)
     } catch (error: unknown) {
       console.error('Error loading initial data:', error)
       

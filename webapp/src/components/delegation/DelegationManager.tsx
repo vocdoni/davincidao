@@ -95,7 +95,7 @@ export const DelegationManager = ({
           <button
             onClick={() => setShowAddDelegate(true)}
             disabled={isLoading || isExecuting}
-            className="text-white hover:bg-gray-900 px-2 py-1 transition-colors text-xs"
+            className="text-white border border-white hover:bg-gray-900 px-2 py-1 transition-colors text-xs disabled:opacity-50"
           >
             + ADD
           </button>
