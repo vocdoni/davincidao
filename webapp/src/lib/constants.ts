@@ -125,12 +125,6 @@ export const SUPPORTED_NETWORKS = {
 
 // Local storage keys
 export const STORAGE_KEYS = {
-  CENSUS_CACHE: 'davinci-census-cache',
-  MERKLE_TREE: 'davinci-merkle-tree',
-  MERKLE_CACHE_INDEX: 'davinci-merkle-index',
-  MERKLE_TREE_PREFIX: 'davinci-merkle-tree-',
-  MERKLE_METADATA: 'davinci-merkle-metadata',
-  MERKLE_TEMP: 'davinci-merkle-temp-',
   USER_PREFERENCES: 'davinci-user-preferences',
   COLLECTION_METADATA: 'davinci-collection-metadata',
 } as const
@@ -144,20 +138,6 @@ export const UI_CONFIG = {
   MAX_TOKENS_PER_TX: 50, // Maximum tokens to delegate/undelegate per transaction (gas limit safety)
   RECOMMENDED_BATCH_SIZE: 20, // Recommended batch size for optimal gas usage
   TOKEN_METADATA_CACHE_DURATION: 60 * 60 * 1000, // 1 hour for token metadata
-  
-  // Enhanced Merkle Tree Caching Configuration
-  MERKLE_CACHE: {
-    MAX_CACHED_TREES: 10, // Maximum number of trees to keep in cache
-    TREE_CACHE_DURATION: 24 * 60 * 60 * 1000, // 24 hours for tree data
-    BATCH_SIZE: 50, // Nodes to fetch per batch
-    MAX_RETRIES: 3, // Maximum retry attempts
-    INITIAL_RETRY_DELAY: 1000, // Initial retry delay in ms
-    MAX_RETRY_DELAY: 10000, // Maximum retry delay in ms
-    BACKOFF_FACTOR: 2, // Exponential backoff multiplier
-    COMPRESSION_ENABLED: true, // Enable data compression
-    INTEGRITY_CHECK_ENABLED: true, // Enable checksum validation
-    AUTO_CLEANUP_ENABLED: true, // Enable automatic cache cleanup
-  }
 } as const
 
 // ERC-721 Interface IDs for detection
