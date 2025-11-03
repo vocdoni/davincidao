@@ -1,6 +1,6 @@
 specVersion: 1.3.0
 description: DavinciDao delegation tracking subgraph
-repository: https://github.com/vocdoni/davincidao
+repository: https://github.com/vocdoni
 schema:
   file: ./schema.graphql
 indexerHints:
@@ -10,9 +10,9 @@ dataSources:
     name: DavinciDao
     network: base
     source:
-      address: "0x269dD41Bd98696A7c8fDD3cBE4e7ef1aC29d7218"
+      address: "0xb374d775c1f0318a73951b4196487b07835aebd3"
       abi: DavinciDao
-      startBlock: 37581800
+      startBlock: 37698823
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

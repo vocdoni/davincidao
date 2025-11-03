@@ -14,7 +14,7 @@ import {DavinciDao} from "../src/DavinciDao.sol";
 contract DeployDavinciDao is Script {
     function run() external {
         // Read NFT collection addresses from environment or use defaults
-        address[] memory collections = new address[](2);
+        address[] memory collections = new address[](1);
 
         // Default: Use existing test NFT collection
 	/*
@@ -31,11 +31,7 @@ contract DeployDavinciDao is Script {
 	// Haberdashery
         collections[0] = vm.envOr(
             "COLLECTION_ADDRESS",
-            address(0x980Fbdd1cF05080781Dca0AEf7026B0406743389)
-        );
-        collections[1] = vm.envOr(
-            "COLLECTION_ADDRESS",
-            address(0x85E7DF5708902bE39891d59aBEf8E21EDE91E8BF)
+            address(0x00C9B29A07708aea37c66064da8e3fd2C829e953)
         );
 
 
