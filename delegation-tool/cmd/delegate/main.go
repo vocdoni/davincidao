@@ -17,8 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/pflag"
 	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/census"
-	"github.com/vocdoni/davincidao/delegation-tool/internal/nft"
-	"github.com/vocdoni/davincidao/delegation-tool/internal/subgraph"
+	"github.com/vocdoni/davincidao/delegation-tool/nft"
+	"github.com/vocdoni/davincidao/delegation-tool/subgraph"
 )
 
 const (
