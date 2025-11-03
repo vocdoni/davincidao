@@ -81,6 +81,27 @@ async function validateCensusRootBeforeTransaction(contract: DavinciDaoContract)
 
   console.log(`  ├─ Found ${allEvents.length} WeightChanged events`)
 
+  // Handle empty tree case
+  if (allEvents.length === 0) {
+    console.log('  ├─ Tree is empty (no events yet)')
+    console.log('  ├─ Computed root: 0x0')
+    console.log('  ├─ Tree size: 0 participants')
+
+    // Verify the on-chain root is also 0
+    if (onChainRoot !== 0n) {
+      console.error('  └─ ❌ ROOT MISMATCH!')
+      console.error(`     On-chain:  ${onChainRootHex}`)
+      console.error(`     Computed:  0x0`)
+      throw new Error(
+        `ROOT_MISMATCH: On-chain root is ${onChainRootHex} but tree has no events. ` +
+        `The subgraph may be out of sync.`
+      )
+    }
+
+    console.log('  └─ ✅ Census root validation PASSED (empty tree)')
+    return // No validation needed for empty tree
+  }
+
   // Step 3: Replay events to build tree exactly as contract did
   console.log('  ├─ Replaying events to reconstruct tree...')
 
@@ -198,6 +219,18 @@ async function fetchCensusDataFromSubgraph(contract: DavinciDaoContract): Promis
   }
 
   console.log(`Fetched ${allEvents.length} WeightChanged events for tree replay`)
+
+  // Handle empty tree case
+  if (allEvents.length === 0) {
+    console.log('Tree is empty (no events yet)')
+    const root = await contract.getCensusRoot()
+    return {
+      root: root.toString(),
+      nodes: [],
+      totalParticipants: 0,
+      tree: null  // No tree when empty
+    }
+  }
 
   // Replay events to build tree
   const { LeanIMT } = await import('@zk-kit/lean-imt')

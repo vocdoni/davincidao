@@ -8,17 +8,24 @@ import { LeanIMT } from '@zk-kit/lean-imt'
  * not just the list of nodes. The tree may contain empty slots from removed leaves,
  * and we must generate proofs using the exact tree structure (with gaps).
  *
- * @param tree - The actual LeanIMT tree with correct structure (including empty slots)
+ * @param tree - The actual LeanIMT tree with correct structure (including empty slots), or null if tree is empty
  * @param censusData - The complete census data with all nodes
  * @param addresses - Array of addresses to generate proofs for
  * @returns Object mapping addresses to their Merkle proof siblings
  */
 export function generateProofs(
-  tree: LeanIMT,
+  tree: LeanIMT | null,
   censusData: CensusData,
   addresses: string[]
 ): { [address: string]: string[] } {
   console.log('=== Generating proofs ===')
+
+  // Handle empty tree case
+  if (!tree) {
+    console.log('Tree is empty (null), returning empty proofs')
+    return {}
+  }
+
   console.log('Tree size:', tree.size)
   console.log('Active nodes:', censusData.nodes.length)
   console.log('Addresses to generate proofs for:', addresses)

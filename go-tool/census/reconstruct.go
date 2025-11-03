@@ -80,11 +80,14 @@ func ReconstructTree(ctx context.Context, subgraphURL string) (*leanimt.LeanIMT[
 
 	if len(allEvents) == 0 {
 		fmt.Println("   └─ ⚠️  No events found, tree is empty")
-		// Return empty tree
+		// Return empty tree with root = 0
+		// Note: Empty LeanIMT tree has no root (tree.Root() returns false)
+		// but the contract returns 0 for empty tree, so we return 0 here
 		tree, err := leanimt.New(leanimt.PoseidonHasher, leanimt.BigIntEqual, nil, nil, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create empty tree: %w", err)
 		}
+		fmt.Println("   └─ Root: 0x0 (empty tree)")
 		return tree, big.NewInt(0), nil
 	}
 
@@ -223,10 +226,18 @@ func UnpackLeaf(leaf *big.Int) (common.Address, uint64) {
 // Returns error if roots don't match
 func ValidateRoot(tree *leanimt.LeanIMT[*big.Int], expectedRoot *big.Int) error {
 	root, exists := tree.Root()
+
+	// Handle empty tree case
+	// Empty LeanIMT has no root (exists = false), but contract returns 0 for empty tree
 	if !exists {
-		return fmt.Errorf("tree has no root")
+		// Tree is empty, verify expected root is also 0
+		if expectedRoot.Cmp(big.NewInt(0)) != 0 {
+			return fmt.Errorf("root mismatch: tree is empty but expected root is 0x%x", expectedRoot)
+		}
+		return nil
 	}
 
+	// Non-empty tree: compare roots
 	if root.Cmp(expectedRoot) != 0 {
 		return fmt.Errorf("root mismatch: expected 0x%x, got 0x%x", expectedRoot, root)
 	}

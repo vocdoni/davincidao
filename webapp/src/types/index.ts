@@ -55,7 +55,7 @@ export interface CensusData {
   root: string
   nodes: MerkleTreeNode[]
   totalParticipants: number
-  tree: any  // LeanIMT instance with correct structure (including empty slots)
+  tree: any | null  // LeanIMT instance with correct structure (including empty slots), null when tree is empty
 }
 
 /**

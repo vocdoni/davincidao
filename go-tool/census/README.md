@@ -55,7 +55,7 @@ Reconstructs the census tree by replaying all WeightChanged events from the subg
 
 **Returns:**
 - `tree`: The reconstructed LeanIMT tree
-- `root`: The tree root as *big.Int
+- `root`: The tree root as *big.Int (0 for empty tree)
 - `err`: Any error encountered
 
 **Example:**
@@ -64,6 +64,12 @@ tree, root, err := census.ReconstructTree(ctx, "https://api.studio.thegraph.com/
 if err != nil {
     log.Fatal(err)
 }
+
+// Empty tree handling:
+// When no events exist (brand new contract):
+// - root will be big.NewInt(0)
+// - tree.Size() returns 0
+// - tree.Root() returns (0, false) since tree has no nodes
 ```
 
 ### ValidateRoot
