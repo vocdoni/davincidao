@@ -41,162 +41,141 @@ DavinciDAO Census Contract enables ERC-721 NFT holders to delegate their voting 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Smart Contract Deployment
+## Quick Start
+
+The easiest way to deploy and configure everything is using the automated deployment pipeline:
+
+```bash
+# View available commands and deployments
+make help
+
+# Deploy a configuration
+make deploy <deployment-name>
+```
+
+Example:
+```bash
+make deploy haberdashery    # Deploy haberdashery configuration
+make deploy test-sepolia    # Deploy test configuration on Sepolia
+```
+
+### What This Does
+
+The `make deploy` command automatically:
+1. ✅ Compiles and deploys the smart contract using Forge
+2. ✅ Updates subgraph configuration with the new contract address
+3. ✅ Deploys the subgraph to The Graph (if credentials provided)
+4. ✅ Configures `webapp/.env` with deployment details
 
 ### Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) - Ethereum development toolkit
+- [Node.js & pnpm](https://pnpm.io/) - For webapp and subgraph
+- [The Graph CLI](https://thegraph.com/docs/en/quick-start/) - For subgraph deployment (optional)
 - An Ethereum RPC endpoint (Alchemy, Infura, or local node)
 - Deployment wallet with ETH for gas fees
 
-### Quick Start
+### Setup
 
-1. **Clone the repository**
+1. **Clone and install**
    ```bash
    git clone <repository-url>
    cd davincidao
+   make install
    ```
 
-2. **Install dependencies**
+2. **Configure environment** (optional)
+
+   Create a `.env` file in the project root with your credentials:
    ```bash
-   forge install
+   PRIVATE_KEY=0x...                           # Deployer private key
+   RPC_URL=https://ethereum-rpc-endpoint       # RPC endpoint
+   ETHERSCAN_API_KEY=...                       # For contract verification
+   GRAPH_DEPLOY_KEY=...                        # The Graph deploy key
+   GRAPH_SLUG=davinci-sepolia-test             # Subgraph slug
    ```
 
-3. **Configure environment variables**
+   If not provided, the deployment script will prompt you interactively.
 
-   Create a `.env` file in the project root:
+3. **Create a deployment configuration**
+
+   Deployments are defined in `deployments/<name>/deploy.sol`:
    ```bash
-   PRIVATE_KEY=your_private_key_without_0x_prefix
-   RPC_URL=https://eth-mainnet.g.alchemy.com/v2/your-api-key
-   ETHERSCAN_API_KEY=your_etherscan_api_key  # Optional, for verification
+   deployments/
+   ├── haberdashery/        # Haberdashery NFT deployment
+   │   └── deploy.sol
+   ├── test-sepolia/        # Test deployment on Sepolia
+   │   └── deploy.sol
+   └── your-deployment/     # Your custom deployment
+       └── deploy.sol
    ```
 
-4. **Configure your NFT collections**
-
-   Edit `script/DeployDavinciDao.s.sol` to specify your NFT contracts:
+   Example `deploy.sol`:
    ```solidity
-   // Example: Deploy with your NFT collections
-   address[] memory nftContracts = new address[](2);
-   nftContracts[0] = 0xYourNFTContract1;  // Your first ERC-721 collection
-   nftContracts[1] = 0xYourNFTContract2;  // Your second ERC-721 collection
+   // SPDX-License-Identifier: MIT
+   pragma solidity ^0.8.24;
+
+   import {Script, console2} from "forge-std/Script.sol";
+   import "../../src/DavinciDao.sol";
+
+   contract DeployDavinciDao is Script {
+       function run() external {
+           address[] memory collections = new address[](1);
+           collections[0] = address(0x7c61Ae9629664D1CEEc8Abc0fD17CB0866d86d89);
+
+           uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+           vm.startBroadcast(deployerPrivateKey);
+
+           DavinciDao census = new DavinciDao(collections);
+           console2.log("  Contract deployed at: %s", address(census));
+
+           vm.stopBroadcast();
+       }
+   }
    ```
 
-5. **Deploy the contract**
+4. **Deploy**
    ```bash
-   source .env
-   forge script script/DeployDavinciDao.s.sol \
-       --rpc-url $RPC_URL \
-       --private-key $PRIVATE_KEY \
-       --broadcast \
-       --verify
+   make deploy your-deployment
    ```
 
-6. **Save the deployed contract address**
+   The deployment will:
+   - Prompt for any missing configuration
+   - Deploy the contract
+   - Update subgraph.yaml with the contract address and start block
+   - Deploy subgraph (if Graph credentials provided)
+   - Update webapp/.env with all configuration
 
-   The deployment script will output the contract address. Save this for configuring the webapp and subgraph.
+5. **Verify contract**
+   ```bash
+   make verify-contract CONTRACT=0x... CHAIN_ID=11155111
+   ```
 
-### Build & Test
-
-```bash
-# Build contracts
-forge build
-
-# Run tests
-forge test
-
-# Run tests with gas reporting
-forge test --gas-report
-
-# Run specific test
-forge test --match-test testDelegate
-```
-
-### Contract Verification
-
-If you didn't use `--verify` during deployment, you can verify later:
+### Development Workflow
 
 ```bash
-forge verify-contract \
-    --chain-id 1 \
-    --compiler-version v0.8.24 \
-    <DEPLOYED_CONTRACT_ADDRESS> \
-    src/DavinciDao.sol:DavinciDao \
-    --constructor-args $(cast abi-encode "constructor(address[])" "[0xNFT1,0xNFT2]")
+make test          # Run Solidity tests
+make run           # Start webapp dev server
+make build         # Build smart contracts
+make clean         # Clean build artifacts
 ```
 
-## Contract Usage
+### Example: Test Deployment on Sepolia
 
-### Delegating Voting Power
+```bash
+# Using environment variables from .env
+make deploy test-sepolia
 
-```solidity
-// Delegate tokens to a representative
-uint256[] memory tokenIds = [1, 2, 3];
-uint88 currentWeight = 0;  // Obtain from subgraph or events
-uint256[] memory proof = []; // Empty if first delegation
-
-census.delegate(
-    representativeAddress,
-    collectionIndex,  // 0 for first collection, 1 for second, etc.
-    tokenIds,
-    currentWeight,
-    proof
-);
+# Or provide interactively when prompted:
+# - Private key: 0x551c8ae18ba84d8279d2e8090c379520af28d9a3f62b94ae80e9c78cc8cb5520
+# - RPC URL: https://ethereum-rpc-endpoint
+# - Graph slug: test
 ```
 
-### Removing Delegation
-
-```solidity
-// Undelegate tokens (must be token owner)
-uint256[] memory tokenIds = [1, 2];
-ProofInput[] memory proofs = [...]; // Proofs for affected delegates
-
-census.undelegate(collectionIndex, tokenIds, proofs);
+After deployment, start the webapp:
+```bash
+make run
 ```
-
-### Querying Contract State
-
-```solidity
-// Get current census root
-uint256 root = census.getCensusRoot();
-
-// Verify a historical root
-uint256 blockNumber = census.getRootBlockNumber(historicalRoot);
-
-// Check token delegations
-uint256[] memory tokenIds = [1, 2, 3];
-address[] memory delegates = census.getTokenDelegations(collectionIndex, tokenIds);
-
-// Get your delegated tokens that you still own
-uint256[] memory candidates = [1, 2, 3, 4, 5];
-uint256[] memory delegated = census.getNFTids(collectionIndex, candidates);
-```
-
-### Events
-
-Monitor these events for off-chain indexing:
-
-```solidity
-event DelegatedBatch(address indexed owner, address indexed to, uint256 indexed nftIndex, uint256[] tokenIds);
-event UndelegatedBatch(address indexed owner, address indexed from, uint256 indexed nftIndex, uint256[] tokenIds);
-event WeightChanged(address indexed account, uint88 previousWeight, uint88 newWeight);
-event CensusRootUpdated(uint256 indexed newRoot, uint256 blockNumber);
-```
-
-## Gas Costs
-
-Approximate gas costs for common operations:
-
-| Operation | Cold | Warm | Notes |
-|-----------|------|------|-------|
-| `delegate()` (1 token) | ~140k | ~120k | First delegation to an address |
-| `delegate()` (5 tokens) | ~200k | ~160k | Batch delegation savings |
-| `undelegate()` (1 token) | ~150k | ~130k | Includes tree update |
-| `updateDelegation()` (1 token) | ~180k | ~150k | Moving delegation between addresses |
-| `getCensusRoot()` | ~2.5k | ~100 | View function |
-| `getTokenDelegations()` | ~3k per token | ~500 per token | View function |
-
-*Costs vary based on tree size and number of unique delegates affected*
-
 ## Supporting Components
 
 ### The Graph Subgraph
@@ -228,7 +207,7 @@ A Go-based command-line tool for:
 - Integration testing
 - Automated delegation workflows
 
-See [`delegation-tool/README.md`](delegation-tool/README.md) for usage.
+See [`go-tool/README.md`](go-tool/README.md) for usage.
 
 ## External Contract Integration
 
@@ -270,13 +249,6 @@ contract VotingContract {
     }
 }
 ```
-
-### Integration Benefits
-
-1. **On-chain Verification**: External contracts can verify census roots without trusting off-chain data
-2. **Historical Validation**: Check when a specific census state existed (useful for time-locked voting)
-3. **Standard Interface**: Consistent API across different census implementations
-4. **Gas Efficient**: Single view function call (~2.5k gas)
 
 ### Root History Limitations
 
@@ -331,54 +303,6 @@ See [`src/examples/VotingExample.sol`](src/examples/VotingExample.sol) for a com
 **`getNFTids(uint256 nftIndex, uint256[] calldata candidateIds) → uint256[]`**
 - Returns token IDs that are delegated AND currently owned by caller
 - Gas-optimized single-pass filter
-
-## Security Considerations
-
-1. **Proof Requirements**: All weight modifications require valid Merkle proofs to prevent unauthorized manipulation
-2. **Ownership Verification**: Transient storage caching (EIP-1153) provides gas-efficient, secure ownership checks
-3. **Root History**: Circular buffer maintains last 100 roots for historical verification (~1-2 days at 15s blocks)
-4. **Event Integrity**: All state changes emit events for off-chain verification and reconstruction
-
-## Development
-
-### Project Structure
-
-```
-davincidao/
-├── src/
-│   ├── DavinciDao.sol          # Main census contract
-│   ├── ICensusValidator.sol    # Standard interface for external contracts
-│   ├── examples/               # Example implementations
-│   │   └── VotingExample.sol   # Reference voting contract
-│   └── mocks/                  # Test mocks
-├── script/
-│   └── DeployDavinciDao.s.sol  # Deployment script
-├── test/                       # Foundry tests
-├── subgraph/                   # The Graph subgraph
-├── webapp/                     # React web interface
-├── delegation-tool/            # Go CLI tool
-└── foundry.toml               # Foundry configuration
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-forge test
-
-# Run with verbosity
-forge test -vvv
-
-# Run specific test file
-forge test --match-path test/DavinciDaoMultiCollection.t.sol
-
-# Generate coverage report
-forge coverage
-```
-
-## License
-
-MIT License - see LICENSE file for details
 
 ## Off-Chain Tree Reconstruction Algorithm
 
@@ -489,77 +413,3 @@ console.log('Tree root:', tree.root)
    // Contract: (address << 88) | weight
    uint256 leaf = (uint256(uint160(account)) << 88) | uint256(weight);
    ```
-
-### Subgraph Schema
-
-The subgraph provides two ways to reconstruct:
-
-```graphql
-# Option 1: Query all weight change events (RECOMMENDED)
-query GetWeightChangeEvents {
-  weightChangeEvents(
-    first: 1000
-    orderBy: blockNumber
-    orderDirection: asc
-  ) {
-    account { id address }
-    previousWeight
-    newWeight
-    blockNumber
-    logIndex
-  }
-}
-
-# Option 2: Query current accounts (ONLY for display, NOT for tree building)
-query GetCurrentAccounts {
-  accounts(where: { weight_gt: "0" }) {
-    id
-    address
-    weight
-  }
-}
-```
-
-### Critical Implementation Details
-
-**Proof Generation**: When generating Merkle proofs, you MUST use the actual replayed tree object, not rebuild from the list of active accounts. The tree object contains the correct structure with empty slots.
-
-```typescript
-// ❌ WRONG: Rebuilding tree from nodes for proof generation
-const tree = new LeanIMT()
-for (const node of activeNodes) {
-  tree.insert(node.leaf)  // This loses empty slots!
-}
-const proof = tree.generateProof(index)  // Invalid proof!
-
-// ✅ CORRECT: Use the tree from event replay
-const tree = await replayEventsToRebuildTree()  // Includes empty slots
-const proof = tree.generateProof(index)  // Valid proof!
-```
-
-**Why**: The tree may have empty slots from removed accounts. When you rebuild from only active accounts, you lose these gaps, creating a different tree structure with wrong indices.
-
-### Implementation Reference
-
-See `webapp/src/hooks/useDelegation.ts` for the complete implementation:
-- `validateCensusRootBeforeTransaction()` - Validates tree reconstruction with event replay
-- `fetchCensusDataFromSubgraph()` - Returns the replayed tree object for proof generation
-- `generateProofs()` in `webapp/src/lib/merkle.ts` - Takes the actual tree as parameter
-
-### Why This Matters
-
-**Security**: Before executing any transaction that requires Merkle proofs (like updating delegations), the webapp MUST verify that its reconstructed tree matches the contract's root. If the roots don't match, the transaction would fail because the proofs would be invalid.
-
-**Correctness**: The entire delegation system relies on accurate Merkle proofs. Using the wrong tree reconstruction method would make it impossible to generate valid proofs, breaking all delegation operations.
-
-### Debugging Mismatches
-
-If you encounter root mismatches:
-
-1. **Check event order**: Ensure events are sorted by `blockNumber`, then `logIndex`
-2. **Verify completeness**: Confirm you're fetching ALL events, not just recent ones
-3. **Log operations**: Print each INSERT/UPDATE/REMOVE to trace tree changes
-4. **Compare sizes**: Contract tree size should match reconstructed tree size
-5. **Check leaf packing**: Verify `(address << 88) | weight` format is correct
-
-The webapp includes detailed console logging when `validateCensusRootBeforeTransaction()` runs - check browser console for debugging information.
