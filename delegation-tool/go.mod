@@ -4,9 +4,8 @@ go 1.25.1
 
 require (
 	github.com/ethereum/go-ethereum v1.16.5
-	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/spf13/pflag v1.0.10
-	github.com/vocdoni/lean-imt-go v0.0.0-20250102000000-000000000000
+	github.com/vocdoni/lean-imt-go v0.0.0-20251103151137-69d0403c705f
 )
 
 require (
@@ -36,6 +35,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
+	github.com/iden3/go-iden3-crypto v0.0.17 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -73,6 +73,3 @@ require (
 	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
-
-// Temporarily use local clone for development
-replace github.com/vocdoni/lean-imt-go => /tmp/lean-imt-go
