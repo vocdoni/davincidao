@@ -6,8 +6,8 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/vocdoni/davincidao/delegation-tool/subgraph"
-	"github.com/vocdoni/davincidao/delegation-tool/census"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/subgraph"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/census"
 )
 
 // Example demonstrates how to reconstruct the census tree from subgraph events

@@ -1,4 +1,4 @@
-module github.com/vocdoni/davincidao/delegation-tool
+module github.com/vocdoni/davinci-onchain-census/go-tool
 
 go 1.25.1
 

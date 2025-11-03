@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	leanimt "github.com/vocdoni/lean-imt-go"
 
-	"github.com/vocdoni/davincidao/delegation-tool/subgraph"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/subgraph"
 )
 
 // weightChangeEvent represents a weight change event from the subgraph

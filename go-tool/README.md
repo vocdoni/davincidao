@@ -1,4 +1,4 @@
-# DavinciDAO Delegation Tool
+# DAVINCI onchain census Golang tool
 
 A Go-based toolkit for managing NFT delegations in the DavinciDAO Census Contract. Includes both command-line tools and reusable Go packages for tree reconstruction and delegation management.
 
@@ -22,7 +22,7 @@ All packages are designed to be imported and used by external Go programs. They 
 Core package for reconstructing the census tree from subgraph events using the event replay algorithm. Simple API - just provide a subgraph URL.
 
 ```go
-import "github.com/vocdoni/davincidao/delegation-tool/census"
+import "github.com/vocdoni/davinci-onchain-census/go-tool/census"
 
 // Reconstruct tree from subgraph
 tree, root, err := census.ReconstructTree(ctx, subgraphURL)
@@ -44,7 +44,7 @@ See [census/README.md](census/README.md) for detailed API documentation.
 GraphQL client for querying The Graph subgraph that indexes DavinciDAO events. Used internally by the census package, but also provides query methods for account and statistics lookups.
 
 ```go
-import "github.com/vocdoni/davincidao/delegation-tool/subgraph"
+import "github.com/vocdoni/davinci-onchain-census/go-tool/subgraph"
 
 client := subgraph.NewClient(subgraphURL)
 account, err := client.GetAccount(ctx, address)
@@ -56,7 +56,7 @@ stats, err := client.GetGlobalStats(ctx)
 NFT discovery utilities for finding owned NFTs across collections, with support for ERC-721 and Alchemy API integration.
 
 ```go
-import "github.com/vocdoni/davincidao/delegation-tool/nft"
+import "github.com/vocdoni/davinci-onchain-census/go-tool/nft"
 ```
 
 ## Command-Line Tools
@@ -94,7 +94,7 @@ Verify your census tree matches the on-chain contract:
 ```bash
 # Clone the repository
 git clone https://github.com/vocdoni/davincidao
-cd davincidao/delegation-tool
+cd davinci-onchain-census/go-tool
 
 # Install dependencies
 go mod tidy
@@ -272,9 +272,9 @@ All packages (`census`, `subgraph`, and `nft`) are designed to be imported by ex
 
 ```go
 import (
-    "github.com/vocdoni/davincidao/delegation-tool/census"
-    "github.com/vocdoni/davincidao/delegation-tool/subgraph"
-    "github.com/vocdoni/davincidao/delegation-tool/nft"
+    "github.com/vocdoni/davinci-onchain-census/go-tool/census"
+    "github.com/vocdoni/davinci-onchain-census/go-tool/subgraph"
+    "github.com/vocdoni/davinci-onchain-census/go-tool/nft"
 )
 ```
 

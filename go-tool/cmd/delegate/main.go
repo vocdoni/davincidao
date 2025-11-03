@@ -16,9 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/pflag"
-	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/census"
-	"github.com/vocdoni/davincidao/delegation-tool/nft"
-	"github.com/vocdoni/davincidao/delegation-tool/subgraph"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/bindings/go/census"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/nft"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/subgraph"
 )
 
 const (

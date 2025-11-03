@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/census"
-	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/erc721"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/bindings/go/census"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/bindings/go/erc721"
 )
 
 // TokenInfo represents information about an NFT

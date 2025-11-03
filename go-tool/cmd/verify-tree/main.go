@@ -10,8 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/pflag"
 
-	"github.com/vocdoni/davincidao/delegation-tool/bindings/go/census"
-	censuspkg "github.com/vocdoni/davincidao/delegation-tool/census"
+	"github.com/vocdoni/davinci-onchain-census/go-tool/bindings/go/census"
+	censuspkg "github.com/vocdoni/davinci-onchain-census/go-tool/census"
 )
 
 func main() {
