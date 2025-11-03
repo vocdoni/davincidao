@@ -19,25 +19,25 @@ DavinciDAO Census Contract enables ERC-721 NFT holders to delegate their voting 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     DavinciDAO Contract                         │
+│                     Onchain Census Contract                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Delegation Mapping                Lean-IMT Census Tree         │
-│  ┌──────────────────┐             ┌──────────────────┐         │
-│  │ TokenID → Delegate│────────────▶│ Address │ Weight │         │
-│  └──────────────────┘             └──────────────────┘         │
+│  ┌──────────────────┐             ┌──────────────────┐          │
+│  │TokenID → Delegate│───────────▶│ Address │ Weight │          │
+│  └──────────────────┘             └──────────────────┘          │
 │                                           │                     │
 │                                           ▼                     │
 │                                    Merkle Root ────┐            │
 │                                                    │            │
-│  Root History (Circular Buffer)                   │            │
-│  ┌──────────────────────────────────────┐         │            │
-│  │ Root₁ → Block₁                        │◀────────┘            │
-│  │ Root₂ → Block₂                        │                     │
-│  │ ...                                   │                     │
-│  └──────────────────────────────────────┘                     │
+│  Root History (Circular Buffer)                    │            │
+│  ┌──────────────────────────────────────┐          │            │
+│  │ Root₁ → Block₁                       │◀────────┘            │
+│  │ Root₂ → Block₂                       │                       │
+│  │ ...                                  │                       │
+│  └──────────────────────────────────────┘                       │
 │                                                                 │
-│  Events ─────▶ The Graph Subgraph ─────▶ Client Queries        │
+│  Events ─────▶ The Graph Subgraph ─────▶ Client Queries       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -62,10 +62,10 @@ make deploy test-sepolia    # Deploy test configuration on Sepolia
 ### What This Does
 
 The `make deploy` command automatically:
-1. ✅ Compiles and deploys the smart contract using Forge
-2. ✅ Updates subgraph configuration with the new contract address
-3. ✅ Deploys the subgraph to The Graph (if credentials provided)
-4. ✅ Configures `webapp/.env` with deployment details
+1. Compiles and deploys the smart contract using Forge
+2. Updates subgraph configuration with the new contract address
+3. Deploys the subgraph to The Graph (if credentials provided)
+4. Configures `webapp/.env` with deployment details
 
 ### Prerequisites
 
@@ -99,18 +99,10 @@ The `make deploy` command automatically:
 
 3. **Create a deployment configuration**
 
-   Deployments are defined in `deployments/<name>/deploy.sol`:
-   ```bash
-   deployments/
-   ├── haberdashery/        # Haberdashery NFT deployment
-   │   └── deploy.sol
-   ├── test-sepolia/        # Test deployment on Sepolia
-   │   └── deploy.sol
-   └── your-deployment/     # Your custom deployment
-       └── deploy.sol
-   ```
+   Deployments are defined in `deployments/<name>/deploy.sol`.
 
    Example `deploy.sol`:
+   
    ```solidity
    // SPDX-License-Identifier: MIT
    pragma solidity ^0.8.24;
@@ -134,7 +126,7 @@ The `make deploy` command automatically:
    }
    ```
 
-4. **Deploy**
+5. **Deploy**
    ```bash
    make deploy your-deployment
    ```
@@ -146,7 +138,7 @@ The `make deploy` command automatically:
    - Deploy subgraph (if Graph credentials provided)
    - Update webapp/.env with all configuration
 
-5. **Verify contract**
+6. **Verify contract**
    ```bash
    make verify-contract CONTRACT=0x... CHAIN_ID=11155111
    ```
