@@ -671,6 +671,10 @@ function App() {
 
             {/* Stats & Sign Button */}
             <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
+              <h3 className="text-2xl font-medium text-gray-900 mb-6 text-center" style={{ lineHeight: '1.1em' }}>
+                ✍️ Sign the Pledge
+              </h3>
+
               <div className="text-center mb-8">
                 <p className="text-6xl font-medium text-gray-900 mb-3" style={{ lineHeight: '1em' }}>
                   {totalPledges.toLocaleString()}
@@ -683,6 +687,7 @@ function App() {
               <SignatureButton
                 pledgeStatus={pledgeStatus}
                 onSign={handleSign}
+                onConnect={connectWallet}
                 loading={pledging}
                 connected={!!account}
               />

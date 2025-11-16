@@ -14,7 +14,7 @@ function parseManifestoText(text: string) {
     // Handle headers (lines starting with #)
     if (line.startsWith('# ')) {
       elements.push(
-        <h3 key={index} className="text-3xl font-medium mt-8 mb-4 text-center" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
+        <h3 key={index} className="text-3xl font-medium mt-8 mb-4 text-left" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
           {line.replace('# ', '')}
         </h3>
       )
@@ -22,7 +22,7 @@ function parseManifestoText(text: string) {
     // Handle subheaders (lines starting with ##)
     else if (line.startsWith('## ')) {
       elements.push(
-        <h4 key={index} className="text-2xl font-medium mt-6 mb-3 text-center" style={{ lineHeight: '1.1em', color: '#4a3f2f' }}>
+        <h4 key={index} className="text-2xl font-medium mt-6 mb-3 text-left" style={{ lineHeight: '1.1em', color: '#4a3f2f' }}>
           {line.replace('## ', '')}
         </h4>
       )
@@ -35,7 +35,7 @@ function parseManifestoText(text: string) {
     else {
       const parts = line.split(/(\*\*.*?\*\*)/)
       elements.push(
-        <p key={index} className="mb-1.5 text-center font-normal text-base" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
+        <p key={index} className="mb-1.5 text-left font-normal text-base" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
           {parts.map((part, i) => {
             if (part.startsWith('**') && part.endsWith('**')) {
               return <strong key={i} className="font-semibold" style={{ color: '#2a1f0f' }}>{part.slice(2, -2)}</strong>
