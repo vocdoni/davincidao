@@ -1,42 +1,33 @@
 specVersion: 1.3.0
-description: DavinciDao delegation tracking subgraph
-repository: https://github.com/vocdoni
+description: We Are Not Spectators Manifesto Census - tracking pledges to The We Are Not Spectators Manifesto
+repository: https://github.com/vocdoni/davincidao
 schema:
   file: ./schema.graphql
 indexerHints:
   prune: auto
 dataSources:
   - kind: ethereum/contract
-    name: DavinciDao
+    name: WeAreNotSpectatorsManifestoCensus
     network: base
     source:
-      address: "0xb374d775c1f0318a73951b4196487b07835aebd3"
-      abi: DavinciDao
-      startBlock: 37698823
+      address: "0xd2ce4B4D8865c8F3650b942662854A1bbDb6F363"
+      abi: WeAreNotSpectatorsManifestoCensus
+      startBlock: 38229780
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
       entities:
-        - Account
-        - Delegator
-        - TokenDelegation
+        - Signer
         - CensusRoot
         - GlobalStats
+        - PledgeEvent
       abis:
-        - name: DavinciDao
-          file: ./abis/DavinciDao.json
+        - name: WeAreNotSpectatorsManifestoCensus
+          file: ./abis/WeAreNotSpectatorsManifestoCensus.json
       eventHandlers:
-        - event: Delegated(indexed address,indexed address,indexed uint256,uint256)
-          handler: handleDelegated
-        - event: Undelegated(indexed address,indexed address,indexed uint256,uint256)
-          handler: handleUndelegated
-        - event: DelegatedBatch(indexed address,indexed address,indexed uint256,uint256[])
-          handler: handleDelegatedBatch
-        - event: UndelegatedBatch(indexed address,indexed address,indexed uint256,uint256[])
-          handler: handleUndelegatedBatch
-        - event: WeightChanged(indexed address,uint88,uint88)
-          handler: handleWeightChanged
+        - event: Pledged(indexed address,uint256)
+          handler: handlePledged
         - event: CensusRootUpdated(indexed uint256,uint256)
           handler: handleCensusRootUpdated
       file: ./src/mapping.ts

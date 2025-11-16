@@ -1,842 +1,780 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'sonner'
-import { WalletButton } from '~/components/wallet/WalletButton'
-import { ErrorBoundary } from '~/components/ErrorBoundary'
-import { useWallet } from '~/hooks/useWallet'
-import { DavinciDaoContract } from '~/lib/contract'
-import { CONTRACT_CONFIG, SUPPORTED_NETWORKS } from '~/lib/constants'
-import { initSubgraphClient, getSubgraphClient } from '~/lib/subgraph-client'
-import { DelegationManager } from '~/components/delegation/DelegationManager'
-import { NFTInfo, Collection, CensusData, MerkleTreeNode } from '~/types'
-import { CollectionAddress, CensusRoot, ContractAddress } from '~/components/common/AddressDisplay'
-import { MintingCallToAction } from '~/components/common/MintingButton'
-import { formatNumber } from '~/lib/utils'
-import { createCensusReconstructor, unpackLeaf } from '~/lib/census'
-import { TreeVisualizationModal } from '~/components/delegation/TreeVisualizationModal'
-import { ValidateCensusRootModal } from '~/components/delegation/ValidateCensusRootModal'
-import { DelegatorsModal } from '~/components/delegation/DelegatorsModal'
-import { LoadingModal } from '~/components/common/LoadingModal'
+import { useState, useEffect } from 'react'
+import { BrowserProvider, JsonRpcProvider } from 'ethers'
+import { toast, Toaster } from 'sonner'
+import { ManifestoContract } from '~/lib/manifesto-contract'
+import { initSubgraphClient, getTotalPledges, getSigner } from '~/lib/subgraph-client'
+import { ManifestoDisplay } from '~/components/manifesto/ManifestoDisplay'
+import { SignatureButton } from '~/components/manifesto/SignatureButton'
+import { AddressChecker } from '~/components/manifesto/AddressChecker'
+import type { ManifestoMetadata, PledgeStatus } from '~/types'
 
-// Initialize React Query
-const queryClient = new QueryClient()
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
+const SUBGRAPH_ENDPOINT = import.meta.env.VITE_SUBGRAPH_ENDPOINT || ''
+const CHAIN_ID = parseInt(import.meta.env.VITE_CHAIN_ID || '11155111')
 
-// Helper to get network name
-function getNetworkName(chainId: number): string {
-  const network = SUPPORTED_NETWORKS[chainId as keyof typeof SUPPORTED_NETWORKS]
-  return network ? network.name : `Chain ${chainId}`
-}
+function App() {
+  const [account, setAccount] = useState<string | null>(null)
+  const [contract, setContract] = useState<ManifestoContract | null>(null)
+  const [metadata, setMetadata] = useState<ManifestoMetadata | null>(null)
+  const [pledgeStatus, setPledgeStatus] = useState<PledgeStatus | null>(null)
+  const [totalPledges, setTotalPledges] = useState<number>(0)
+  const [censusRoot, setCensusRoot] = useState<string>('0')
+  const [loadingContract, setLoadingContract] = useState(false)
+  const [pledging, setPledging] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
 
-function DashboardContent() {
-  const walletState = useWallet()
-  const { isConnected, address, provider, privateKeyWallet, isWrongNetwork, switchNetwork } = walletState
-
-  const [censusRoot, setCensusRoot] = useState<string>('')
-  const [userWeight, setUserWeight] = useState<number>(0)
-  const [userNFTs, setUserNFTs] = useState<NFTInfo[]>([])
-  const [collections, setCollections] = useState<Collection[]>([])
-  const [loading, setLoading] = useState(false)
-  const [contractError, setContractError] = useState<string | null>(null)
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
-  const [isRefreshingCensusRoot, setIsRefreshingCensusRoot] = useState(false)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  // Tree visualization state
-  const [showTreeVisualization, setShowTreeVisualization] = useState(false)
-  const [showValidateCensusRoot, setShowValidateCensusRoot] = useState(false)
-  const [treeData, setTreeData] = useState<CensusData | null>(null)
-  const [isReconstructingTree, setIsReconstructingTree] = useState(false)
-
-  // Collapsible sidebar sections
-  const [showNetworkInfo, setShowNetworkInfo] = useState(false)
-  const [showCollections, setShowCollections] = useState(false)
-  const [showCensusTree, setShowCensusTree] = useState(false)
-  const [showDelegators, setShowDelegators] = useState(false)
-
-  // Delegators modal
-  const [showDelegatorsModal, setShowDelegatorsModal] = useState(false)
-  const [delegatorStats, setDelegatorStats] = useState<{ totalUnique: number; totalActive: number; totalWeight: number } | null>(null)
-
-  // Create contract instance with wallet support
-  const contract = useMemo(() => {
-    if (!provider) {
-      return null
-    }
-
-    // Use private key wallet if available, otherwise use browser wallet
-    if (privateKeyWallet) {
-      return new DavinciDaoContract(provider, CONTRACT_CONFIG.address, privateKeyWallet)
-    } else if (address) {
-      return new DavinciDaoContract(provider, CONTRACT_CONFIG.address, { address })
-    }
-
-    return null
-  }, [provider, privateKeyWallet, address])
-
-  // Initialize required services on app startup
+  // Initialize subgraph on mount
   useEffect(() => {
-    const initializeApp = async () => {
-      console.log('=== DavinciDAO V2 Initialization ===')
-
-      // Check Alchemy API key
-      const alchemyKey = import.meta.env.VITE_ALCHEMY_API_KEY
-      if (!alchemyKey) {
-        console.error('❌ CRITICAL: VITE_ALCHEMY_API_KEY not configured')
-        console.error('DavinciDAO V2 requires Alchemy API for NFT discovery')
-        console.error('Please add VITE_ALCHEMY_API_KEY to your .env file')
-        setContractError('Missing VITE_ALCHEMY_API_KEY in configuration. Cannot discover NFTs.')
-        return
-      }
-      console.log('✓ Alchemy API key configured')
-
-      // Check Subgraph endpoint
-      const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
-      if (!subgraphEndpoint) {
-        console.error('❌ CRITICAL: VITE_SUBGRAPH_ENDPOINT not configured')
-        console.error('DavinciDAO V2 requires The Graph subgraph for delegation data')
-        console.error('Please add VITE_SUBGRAPH_ENDPOINT to your .env file')
-        setContractError('Missing VITE_SUBGRAPH_ENDPOINT in configuration. Cannot query delegation data.')
-        return
-      }
-
-      // Initialize subgraph client
-      try {
-        initSubgraphClient(subgraphEndpoint)
-        console.log('✓ Subgraph client initialized:', subgraphEndpoint)
-      } catch (error) {
-        console.error('❌ Failed to initialize subgraph client:', error)
-        setContractError('Failed to initialize subgraph client. Please check VITE_SUBGRAPH_ENDPOINT.')
-        return
-      }
-
-      // Validate RPC URL and chain ID match
-      try {
-        console.log('Validating RPC configuration...')
-        const testProvider = new (await import('ethers')).JsonRpcProvider(CONTRACT_CONFIG.rpcUrl)
-        const network = await testProvider.getNetwork()
-        const actualChainId = Number(network.chainId)
-
-        if (actualChainId !== CONTRACT_CONFIG.chainId) {
-          console.error('❌ CRITICAL: RPC chain ID mismatch')
-          console.error(`RPC URL (${CONTRACT_CONFIG.rpcUrl}) returns chain ID ${actualChainId}`)
-          console.error(`But VITE_CHAIN_ID is configured as ${CONTRACT_CONFIG.chainId}`)
-          const actualNetwork = getNetworkName(actualChainId)
-          const expectedNetwork = getNetworkName(CONTRACT_CONFIG.chainId)
-          setContractError(
-            `Configuration mismatch: Your RPC URL connects to ${actualNetwork} (Chain ID: ${actualChainId}), ` +
-            `but the app is configured for ${expectedNetwork} (Chain ID: ${CONTRACT_CONFIG.chainId}). ` +
-            `Please update VITE_RPC_URL and VITE_CHAIN_ID in your .env file to match the same network.`
-          )
-          return
-        }
-        console.log(`✓ RPC validated: Chain ID ${actualChainId} matches configuration`)
-      } catch (error) {
-        console.error('❌ Failed to validate RPC URL:', error)
-        setContractError(
-          `Failed to connect to RPC URL: ${CONTRACT_CONFIG.rpcUrl}. ` +
-          `Please check VITE_RPC_URL in your .env file.`
-        )
-        return
-      }
-
-      console.log('✓ All required services initialized')
+    if (SUBGRAPH_ENDPOINT) {
+      initSubgraphClient(SUBGRAPH_ENDPOINT)
+      loadSubgraphData()
     }
-
-    initializeApp()
+    // Always load census data from contract
+    loadCensusData()
   }, [])
 
-  // Refresh only the census root from the contract
-  const refreshCensusRoot = useCallback(async () => {
-    if (!contract) return
+  // Periodic updates for census data and signature count (every 15 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Update census root and total pledges
+      loadCensusData()
+      if (SUBGRAPH_ENDPOINT) {
+        loadSubgraphData()
+      }
+    }, 15000) // 15 seconds
 
-    setIsRefreshingCensusRoot(true)
-    try {
-      console.log('Refreshing census root from contract...')
-      const root = await contract.getCensusRoot()
-      const rootHex = '0x' + root.toString(16)
-      setCensusRoot(rootHex)
-      console.log('✓ Census root refreshed:', rootHex)
+    return () => clearInterval(interval)
+  }, [])
 
-      // Trigger refresh for components that depend on global data
-      setRefreshTrigger(prev => prev + 1)
-    } catch (error) {
-      console.error('Failed to refresh census root:', error)
-    } finally {
-      setIsRefreshingCensusRoot(false)
-    }
-  }, [contract])
+  // Load manifesto metadata on mount (read-only, no wallet needed)
+  useEffect(() => {
+    const loadManifestoMetadata = async () => {
+      // Check localStorage cache first
+      const cacheKey = `manifesto_metadata_${CONTRACT_ADDRESS}`
+      const cachedData = localStorage.getItem(cacheKey)
 
-  // Tree reconstruction function with intelligent caching
-  const handleReconstructTree = useCallback(async () => {
-    if (!contract) {
-      console.error('Contract not available')
-      return
-    }
-
-    setIsReconstructingTree(true)
-    try {
-      const subgraphEndpoint = import.meta.env.VITE_SUBGRAPH_ENDPOINT
-
-      if (!subgraphEndpoint) {
-        throw new Error('Subgraph endpoint not configured')
+      if (cachedData) {
+        try {
+          const cached = JSON.parse(cachedData)
+          console.log('✅ Loaded metadata from cache')
+          setMetadata(cached)
+          setInitialLoading(false)
+          return // Use cached data, no RPC call needed
+        } catch {
+          console.warn('Failed to parse cached metadata, will fetch from RPC')
+          localStorage.removeItem(cacheKey)
+        }
       }
 
-      // Create census reconstructor using The Graph
-      const reconstructor = createCensusReconstructor(subgraphEndpoint)
-
-      // Build tree from subgraph data
-      const tree = await reconstructor.buildTree()
-
-      // Transform to UI format
-      const nodes: MerkleTreeNode[] = []
-      let index = 0
-      for (const [address, packedLeaf] of tree.leaves.entries()) {
-        const { weight } = unpackLeaf(packedLeaf)
-        nodes.push({
-          index,
-          address,
-          weight: Number(weight),
-          leaf: '0x' + packedLeaf.toString(16)
-        })
-        index++
+      // Multiple RPC endpoints for fallback
+      const rpcEndpoints: Record<number, string[]> = {
+        1: ['https://ethereum-rpc.publicnode.com'],
+        11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
+        8453: [
+          'https://base.llamarpc.com',
+          'https://base-rpc.publicnode.com',
+          'https://base.drpc.org',
+          'https://mainnet.base.org',
+          'https://base-mainnet.public.blastapi.io',
+          'https://1rpc.io/base',
+          'https://base-mainnet.gateway.tatum.io'
+        ],
+        42161: ['https://arb1.arbitrum.io/rpc'],
+        10: ['https://mainnet.optimism.io'],
+        137: ['https://polygon-rpc.com']
       }
 
-      const censusData: CensusData = {
-        root: '0x' + tree.root.toString(16),
-        nodes,
-        totalParticipants: tree.size,
-        tree: tree.tree  // Include the actual LeanIMT instance
+      const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+
+      for (let i = 0; i < rpcs.length; i++) {
+        const rpcUrl = rpcs[i]
+        try {
+          console.log(`Attempt ${i + 1}/${rpcs.length}: Loading manifesto from ${rpcUrl}`)
+
+          const provider = new JsonRpcProvider(rpcUrl)
+          const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+
+          const meta = await readOnlyContract.getMetadata()
+          console.log('✅ Metadata loaded successfully from', rpcUrl)
+
+          // Cache the metadata in localStorage
+          localStorage.setItem(cacheKey, JSON.stringify(meta))
+
+          setMetadata(meta)
+          setInitialLoading(false)
+          return // Success - exit the loop
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+          console.error(`❌ RPC ${rpcUrl} failed:`, errorMsg)
+
+          // If this is the last RPC, show error to user
+          if (i === rpcs.length - 1) {
+            console.error('All RPC endpoints failed. Error details:', error)
+            toast.error(
+              <div>
+                <p className="font-semibold">Failed to load manifesto</p>
+                <p className="text-xs mt-1">All RPC endpoints failed. Please try again later.</p>
+                <p className="text-xs text-gray-600 mt-1 font-mono">{errorMsg.substring(0, 100)}</p>
+              </div>,
+              { duration: 10000 }
+            )
+            setInitialLoading(false) // Stop loading even on error
+          }
+          // Continue to next RPC
+        }
       }
-
-      // Update state with tree data
-      setTreeData(censusData)
-
-    } catch (error) {
-      console.error('Failed to reconstruct tree:', error)
-    } finally {
-      setIsReconstructingTree(false)
-    }
-  }, [contract])
-
-  // Census root validation function
-  const handleValidateCensusRoot = useCallback(async (root: string): Promise<bigint> => {
-    if (!contract) {
-      throw new Error('Contract not available')
     }
 
-    try {
-      const blockNumber = await contract.getRootBlockNumber(root)
-      return blockNumber
-    } catch (error) {
-      console.error('Failed to validate census root:', error)
-      throw error
+    loadManifestoMetadata()
+  }, [])
+
+  // Listen for network/account changes
+  useEffect(() => {
+    if (!window.ethereum) return
+
+    const handleChainChanged = (...args: unknown[]) => {
+      const chainIdHex = args[0] as string
+      const newChainId = parseInt(chainIdHex, 16)
+      if (newChainId !== CHAIN_ID) {
+        toast.warning(`Network changed. Please reconnect to use chain ID ${CHAIN_ID}`)
+        // Reset state
+        setAccount(null)
+        setContract(null)
+        setPledgeStatus(null)
+      } else {
+        toast.success('Network switched! Please reconnect your wallet.')
+        // User switched to correct network, encourage reconnect
+        setAccount(null)
+        setContract(null)
+        setPledgeStatus(null)
+      }
     }
-  }, [contract])
 
-  const loadInitialData = useCallback(async (forceRefresh = false) => {
-    if (!contract || !address) return
-
-    // Block all contract operations if on wrong network
-    if (isWrongNetwork) {
-      console.warn('Cannot load data: connected to wrong network')
-      const expectedNetwork = getNetworkName(CONTRACT_CONFIG.chainId)
-      const currentChainId = walletState.chainId
-      const currentNetwork = currentChainId ? getNetworkName(currentChainId) : 'Unknown'
-      setContractError(
-        `Wrong network detected. Please switch from ${currentNetwork} to ${expectedNetwork} (Chain ID: ${CONTRACT_CONFIG.chainId}). ` +
-        `You can switch networks in your wallet or wait for automatic switching.`
-      )
-      setLoading(false)
-      return
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0] as string[]
+      if (accounts.length === 0) {
+        toast.info('Wallet disconnected')
+        setAccount(null)
+        setContract(null)
+        setPledgeStatus(null)
+      } else if (account && accounts[0].toLowerCase() !== account.toLowerCase()) {
+        toast.info('Account changed. Please reconnect.')
+        setAccount(null)
+        setContract(null)
+        setPledgeStatus(null)
+      }
     }
 
-    setLoading(true)
-    setContractError(null)
+    window.ethereum?.on('chainChanged', handleChainChanged)
+    window.ethereum?.on('accountsChanged', handleAccountsChanged)
 
-    try {
-      // Check if contract exists by trying a simple call first
-      const root = await contract.getCensusRoot()
-      const rootHex = '0x' + root.toString(16)  // Convert BigInt to hex string
-      setCensusRoot(rootHex)
+    return () => {
+      window.ethereum?.removeListener('chainChanged', handleChainChanged)
+      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged)
+    }
+  }, [account])
 
-      // Load user's voting weight from subgraph (V2: weights are no longer stored on-chain)
+  // Load census data from contract
+  const loadCensusData = async () => {
+    const rpcEndpoints: Record<number, string[]> = {
+      1: ['https://ethereum-rpc.publicnode.com'],
+      11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
+      8453: [
+        'https://base.llamarpc.com',
+        'https://base-rpc.publicnode.com',
+        'https://base.drpc.org',
+        'https://mainnet.base.org',
+        'https://base-mainnet.public.blastapi.io',
+        'https://1rpc.io/base',
+        'https://base-mainnet.gateway.tatum.io'
+      ],
+      42161: ['https://arb1.arbitrum.io/rpc'],
+      10: ['https://mainnet.optimism.io'],
+      137: ['https://polygon-rpc.com']
+    }
+
+    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+
+    for (const rpcUrl of rpcs) {
       try {
-        const subgraph = getSubgraphClient()
-        const weight = await subgraph.getAccountWeight(address)
-        setUserWeight(weight)
+        const provider = new JsonRpcProvider(rpcUrl)
+        const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+        const info = await readOnlyContract.getCensusInfo()
+        setCensusRoot(info.root)
+        console.log('✅ Census data loaded from', rpcUrl)
+        return // Success
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        console.error(`❌ Census data from ${rpcUrl} failed:`, errorMsg)
+        // Continue to next RPC
+      }
+    }
 
-        // Load global delegator stats
-        const stats = await subgraph.getGlobalStats()
-        if (stats) {
-          setDelegatorStats({
-            totalUnique: parseInt(stats.totalUniqueDelegators),
-            totalActive: parseInt(stats.totalActiveDelegators),
-            totalWeight: parseInt(stats.totalWeight)
-          })
+    // All RPCs failed
+    console.error('Failed to load census data from all RPCs')
+    toast.error('Failed to load census data. Please refresh the page.')
+  }
+
+  // Load subgraph data
+  const loadSubgraphData = async () => {
+    try {
+      const total = await getTotalPledges()
+      setTotalPledges(total)
+    } catch (error) {
+      console.error('Error loading subgraph data:', error)
+      toast.error('Failed to load census data')
+    }
+  }
+
+  // Resolve ENS name to address
+  const handleResolveENS = async (ensName: string): Promise<string | null> => {
+    try {
+      // ENS is only available on Mainnet, always use Mainnet for resolution
+      const mainnetRpcUrl = 'https://ethereum-rpc.publicnode.com'
+      const provider = new JsonRpcProvider(mainnetRpcUrl)
+
+      // Resolve ENS name
+      const resolved = await provider.resolveName(ensName)
+      return resolved
+    } catch (error) {
+      console.error('Error resolving ENS:', error)
+      return null
+    }
+  }
+
+  // Check address pledge status
+  const handleCheckAddress = async (address: string) => {
+    // Use connected contract if available
+    if (contract) {
+      try {
+        const status = await contract.getPledgeStatus(address)
+
+        // Get tree index from subgraph if available
+        let treeIndex: number | undefined
+        if (SUBGRAPH_ENDPOINT && status.hasPledged) {
+          try {
+            const signerData = await getSigner(address)
+            if (signerData) {
+              treeIndex = parseInt(signerData.treeIndex)
+            }
+          } catch {
+            console.log('Subgraph not available for tree index')
+          }
+        }
+
+        return {
+          hasPledged: status.hasPledged,
+          timestamp: status.timestamp,
+          blockNumber: status.blockNumber,
+          treeIndex
         }
       } catch (error) {
-        console.warn('Could not get weight from subgraph, defaulting to 0:', error)
-        setUserWeight(0)
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        console.error('Error checking with connected wallet:', errorMsg)
+        // Fall through to RPC fallback
+      }
+    }
+
+    // Fallback to read-only RPCs
+    const rpcEndpoints: Record<number, string[]> = {
+      1: ['https://ethereum-rpc.publicnode.com'],
+      11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
+      8453: [
+        'https://base.llamarpc.com',
+        'https://base-rpc.publicnode.com',
+        'https://base.drpc.org',
+        'https://mainnet.base.org',
+        'https://base-mainnet.public.blastapi.io',
+        'https://1rpc.io/base',
+        'https://base-mainnet.gateway.tatum.io'
+      ],
+      42161: ['https://arb1.arbitrum.io/rpc'],
+      10: ['https://mainnet.optimism.io'],
+      137: ['https://polygon-rpc.com']
+    }
+
+    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+
+    for (const rpcUrl of rpcs) {
+      try {
+        const provider = new JsonRpcProvider(rpcUrl)
+        const pledgeContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+        const status = await pledgeContract.getPledgeStatus(address)
+
+        // Get tree index from subgraph if available
+        let treeIndex: number | undefined
+        if (SUBGRAPH_ENDPOINT && status.hasPledged) {
+          try {
+            const signerData = await getSigner(address)
+            if (signerData) {
+              treeIndex = parseInt(signerData.treeIndex)
+            }
+          } catch {
+            console.log('Subgraph not available for tree index')
+          }
+        }
+
+        console.log('✅ Address check successful from', rpcUrl)
+        return {
+          hasPledged: status.hasPledged,
+          timestamp: status.timestamp,
+          blockNumber: status.blockNumber,
+          treeIndex
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        console.error(`❌ Address check from ${rpcUrl} failed:`, errorMsg)
+        // Continue to next RPC
+      }
+    }
+
+    // All RPCs failed
+    const error = new Error('Failed to check address pledge status from all RPC endpoints')
+    console.error(error.message)
+    toast.error('Failed to check address. Please try again.')
+    throw error
+  }
+
+  // Helper to add network to wallet
+  const addNetworkToWallet = async (chainId: number) => {
+    interface NetworkConfig {
+      chainId: string
+      chainName: string
+      nativeCurrency: { name: string; symbol: string; decimals: number }
+      rpcUrls: string[]
+      blockExplorerUrls: string[]
+    }
+
+    const networkConfigs: Record<number, NetworkConfig> = {
+      11155111: { // Sepolia
+        chainId: '0xaa36a7',
+        chainName: 'Sepolia Testnet',
+        nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://sepolia.infura.io/v3/'],
+        blockExplorerUrls: ['https://sepolia.etherscan.io']
+      },
+      1: { // Mainnet
+        chainId: '0x1',
+        chainName: 'Ethereum Mainnet',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://mainnet.infura.io/v3/'],
+        blockExplorerUrls: ['https://etherscan.io']
+      },
+      8453: { // Base
+        chainId: '0x2105',
+        chainName: 'Base',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: [
+          'https://base.llamarpc.com',
+          'https://base-rpc.publicnode.com',
+          'https://base.drpc.org',
+          'https://mainnet.base.org',
+          'https://base-mainnet.public.blastapi.io',
+          'https://1rpc.io/base',
+          'https://base-mainnet.gateway.tatum.io'
+        ],
+        blockExplorerUrls: ['https://basescan.org']
+      },
+      42161: { // Arbitrum One
+        chainId: '0xa4b1',
+        chainName: 'Arbitrum One',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+        blockExplorerUrls: ['https://arbiscan.io']
+      },
+      10: { // Optimism
+        chainId: '0xa',
+        chainName: 'Optimism',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://mainnet.optimism.io'],
+        blockExplorerUrls: ['https://optimistic.etherscan.io']
+      },
+      137: { // Polygon
+        chainId: '0x89',
+        chainName: 'Polygon',
+        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+        rpcUrls: ['https://polygon-rpc.com'],
+        blockExplorerUrls: ['https://polygonscan.com']
+      }
+    }
+
+    const config = networkConfigs[chainId]
+    if (!config) {
+      throw new Error(`Network configuration for chain ID ${chainId} not found`)
+    }
+
+    if (!window.ethereum) {
+      throw new Error('No Ethereum provider found')
+    }
+
+    await window.ethereum.request({
+      method: 'wallet_addEthereumChain',
+      params: [config],
+    })
+  }
+
+  // Connect wallet
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      toast.error('Please install MetaMask or another Web3 wallet')
+      return
+    }
+
+    setLoadingContract(true)
+    try {
+      const provider = new BrowserProvider(window.ethereum)
+
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
+
+      const network = await provider.getNetwork()
+      if (Number(network.chainId) !== CHAIN_ID) {
+        // Automatically request network switch
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${CHAIN_ID.toString(16)}` }],
+          })
+          toast.success(`Switched to chain ID ${CHAIN_ID}`)
+          // Refresh provider after network switch
+          const newProvider = new BrowserProvider(window.ethereum)
+          const newSigner = await newProvider.getSigner()
+          const address = await newSigner.getAddress()
+
+          setAccount(address)
+
+          // Initialize contract with new provider
+          const contractInstance = new ManifestoContract(newProvider, CONTRACT_ADDRESS, newSigner)
+          setContract(contractInstance)
+
+          // Load contract metadata
+          const meta = await contractInstance.getMetadata()
+          setMetadata(meta)
+
+          // Load pledge status
+          const status = await contractInstance.getPledgeStatus(address)
+          setPledgeStatus(status)
+
+          // Check subgraph for signer status
+          if (SUBGRAPH_ENDPOINT) {
+            const signerData = await getSigner(address)
+            if (signerData && !status.hasPledged) {
+              console.warn('Subgraph/contract sync issue detected')
+            }
+          }
+
+          toast.success('Wallet connected')
+          setLoadingContract(false)
+          return
+        } catch (switchError) {
+          // Network switch failed or was rejected
+          const errorCode = switchError && typeof switchError === 'object' && 'code' in switchError ? switchError.code : null
+          if (errorCode === 4902) {
+            // Chain not added to wallet, try to add it
+            try {
+              await addNetworkToWallet(CHAIN_ID)
+              toast.info('Network added! Please try connecting again.')
+            } catch {
+              toast.error(`Please manually add chain ID ${CHAIN_ID} to your wallet`)
+            }
+          } else {
+            toast.error(`Please switch to chain ID ${CHAIN_ID} in your wallet`)
+          }
+          setLoadingContract(false)
+          return
+        }
       }
 
-      // Load collections information
-      const collectionsData = await contract.getAllCollections()
-      setCollections(collectionsData)
+      const signer = await provider.getSigner()
+      const address = await signer.getAddress()
 
-      // Load user's NFTs (with optional force refresh to bypass Alchemy cache)
-      const nfts = await contract.getUserNFTs(address, forceRefresh)
-      setUserNFTs(nfts)
+      setAccount(address)
 
-      setHasLoadedOnce(true)
+      // Initialize contract
+      const contractInstance = new ManifestoContract(provider, CONTRACT_ADDRESS, signer)
+      setContract(contractInstance)
 
-      // Trigger refresh for components that depend on global data
-      setRefreshTrigger(prev => prev + 1)
-    } catch (error: unknown) {
-      console.error('Error loading initial data:', error)
-      
-      const errorObj = error as { code?: string; data?: unknown; message?: string }
-      
-      // Set user-friendly error message
-      const networkName = getNetworkName(CONTRACT_CONFIG.chainId)
-      if (errorObj.code === 'CALL_EXCEPTION') {
-        if (errorObj.data === null || errorObj.data === '0x') {
-          setContractError(
-            `No contract found at ${CONTRACT_CONFIG.address} on ${networkName}. ` +
-            `Please verify: (1) The contract is deployed on ${networkName}, ` +
-            `(2) VITE_CONTRACT_ADDRESS in your .env file is correct, and ` +
-            `(3) You're connected to the right network (Chain ID: ${CONTRACT_CONFIG.chainId}).`
-          )
-        } else {
-          setContractError(
-            `Contract call failed on ${networkName}. ` +
-            `Please verify the contract at ${CONTRACT_CONFIG.address} is deployed and accessible.`
-          )
+      // Load contract metadata
+      const meta = await contractInstance.getMetadata()
+      setMetadata(meta)
+
+      // Load pledge status
+      const status = await contractInstance.getPledgeStatus(address)
+      setPledgeStatus(status)
+
+      // Check subgraph for signer status
+      if (SUBGRAPH_ENDPOINT) {
+        const signerData = await getSigner(address)
+        if (signerData && !status.hasPledged) {
+          // Sync issue - subgraph says they pledged but contract doesn't
+          // Trust the contract
+          console.warn('Subgraph/contract sync issue detected')
         }
-      } else if (errorObj.message?.includes('No contract deployed at address')) {
-        setContractError(`${errorObj.message} on ${networkName}`)
+      }
+
+      toast.success('Wallet connected')
+    } catch (error) {
+      console.error('Error connecting wallet:', error)
+      const errorMsg = error instanceof Error ? error.message : 'Failed to connect wallet'
+      toast.error(errorMsg)
+    } finally {
+      setLoadingContract(false)
+    }
+  }
+
+  // Sign the manifesto
+  const handleSign = async () => {
+    if (!contract || !account) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
+    setPledging(true)
+    try {
+      toast.info('Confirm the transaction in your wallet...')
+
+      const txHash = await contract.pledge()
+
+      toast.success(
+        <div>
+          <p className="font-semibold">Manifesto signed!</p>
+          <p className="text-sm">Tx: {txHash.slice(0, 10)}...</p>
+        </div>
+      )
+
+      // Reload status
+      const status = await contract.getPledgeStatus(account)
+      setPledgeStatus(status)
+
+      // Reload stats after a delay (wait for blockchain)
+      setTimeout(() => {
+        loadSubgraphData()
+        loadCensusData()
+      }, 5000)
+    } catch (error) {
+      console.error('Error signing:', error)
+
+      const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : null
+      const errorMsg = error instanceof Error ? error.message : 'Failed to sign manifesto'
+
+      if (errorCode === 'ACTION_REJECTED') {
+        toast.error('Transaction rejected')
+      } else if (errorMsg.includes('AlreadyPledged')) {
+        toast.error('You have already signed the manifesto')
       } else {
-        setContractError(`Failed to load contract data from ${networkName}: ${errorObj.message || 'Unknown error'}`)
+        toast.error(errorMsg)
       }
     } finally {
-      setLoading(false)
+      setPledging(false)
     }
-  }, [contract, address, isWrongNetwork])
+  }
 
-  // Load initial data when wallet connects (only once per connection)
-  useEffect(() => {
-    if (contract && address && !hasLoadedOnce) {
-      loadInitialData()
-    }
-  }, [contract, address, hasLoadedOnce, loadInitialData])
-
-  // Reset all state when wallet disconnects
-  useEffect(() => {
-    if (!isConnected) {
-      console.log('Wallet disconnected - resetting app state')
-      setCensusRoot('')
-      setUserWeight(0)
-      setUserNFTs([])
-      setCollections([])
-      setLoading(false)
-      setContractError(null)
-      setHasLoadedOnce(false)
-      setTreeData(null)
-      setDelegatorStats(null)
-      setShowTreeVisualization(false)
-      setShowValidateCensusRoot(false)
-      setShowDelegatorsModal(false)
-      setRefreshTrigger(0)
-    }
-  }, [isConnected])
-
-  // Auto-load tree data when Census Tree section is expanded
-  useEffect(() => {
-    if (showCensusTree && !treeData && !isReconstructingTree && contract) {
-      console.log('Auto-loading tree data for Census Tree card...')
-      handleReconstructTree()
-    }
-  }, [showCensusTree, treeData, isReconstructingTree, contract, handleReconstructTree])
-
-  if (!isConnected) {
+  // Show loader until manifesto is loaded
+  if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#dbc2a5] flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            DavinciDAO Census Manager
-          </h1>
-          <p className="text-gray-600 mb-8">
-            Connect your wallet to manage NFT delegations for voting
+          {/* DAVINCI Logo */}
+          <div className="mb-8 flex justify-center">
+            <img src="/davinci-logo.svg" alt="DAVINCI" className="w-24 h-24 animate-pulse" />
+          </div>
+
+          {/* Loading Spinner */}
+          <div className="mb-6">
+            <div className="relative w-16 h-16 mx-auto">
+              <div className="absolute inset-0 border-4 border-[#D4C4AC] rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-[#7A6746] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          </div>
+
+          {/* Loading Text */}
+          <h2 className="text-2xl font-medium text-gray-900 mb-2" style={{ lineHeight: '1.1em' }}>
+            Loading Manifesto...
+          </h2>
+          <p className="text-sm text-gray-700 font-normal" style={{ lineHeight: '1.1em' }}>
+            Connecting to Base network
           </p>
-          <WalletButton />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-black text-white border-b-2 border-black">
-        <div className="container py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            {/* Left side - Logo and Title */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              {import.meta.env.VITE_APP_AVATAR_URL && (
-                <img
-                  src={import.meta.env.VITE_APP_AVATAR_URL}
-                  alt="Avatar"
-                  className="w-8 h-8 sm:w-10 sm:h-10 rounded border border-white flex-shrink-0"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-sm sm:text-xl font-mono font-bold uppercase tracking-wider truncate">
-                  [ {import.meta.env.VITE_APP_TITLE || 'DAVINCIDAO'} ]
-                </h1>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#dbc2a5]">
+      <Toaster position="top-right" />
 
-            {/* Right side - Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Header */}
+      <header className="bg-[#dbc2a5] border-b border-[#D4C4AC]">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            {/* Logo and Title */}
+            <a href="https://davinci.vote" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <img src="/davinci-logo.svg" alt="DAVINCI" className="w-8 h-8" />
+              <span className="text-sm font-medium text-gray-900 uppercase tracking-wider">DAVINCI</span>
+            </a>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => loadInitialData(true)}
-                disabled={loading || !!contractError}
-                className="btn-minimal text-xs whitespace-nowrap"
+                onClick={() => {
+                  const signCard = document.getElementById('sign-card')
+                  if (signCard) {
+                    signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                }}
+                className="px-6 py-2.5 bg-white/60 text-gray-900 rounded-full hover:bg-white/80 transition-colors text-sm font-medium border border-[#D4C4AC]"
               >
-                {loading ? 'LOADING...' : 'REFRESH'}
+                Sign the Manifesto
               </button>
-              <WalletButton />
+
+              <button
+                onClick={connectWallet}
+                disabled={loadingContract}
+                className="px-6 py-2.5 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {loadingContract ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Connecting...
+                  </span>
+                ) : account ? (
+                  `${account.slice(0, 6)}...${account.slice(-4)}`
+                ) : (
+                  'Connect Wallet'
+                )}
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container py-8">
-        {/* Network Mismatch Alert */}
-        {isWrongNetwork && (
-          <div className="mb-6 p-4 border-2 border-black bg-white">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h3 className="text-sm font-mono font-bold mb-2">WARNING: WRONG NETWORK</h3>
-                <div className="text-sm text-gray-700 mb-3">
-                  Expected Chain ID: <span className="font-mono terminal-accent">{CONTRACT_CONFIG.chainId}</span>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await switchNetwork()
-                    } catch (error) {
-                      console.error('Failed to switch network:', error)
-                      alert('Failed to switch network. Please switch manually in your wallet.')
-                    }
-                  }}
-                  className="btn-accent text-xs"
-                >
-                  SWITCH NETWORK
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Main Content with Background */}
+      <main className="max-w-[1008px] mx-auto px-6 py-12 relative" style={{
+        backgroundImage: 'url(/background.avif)',
+        backgroundSize: 'contain',
+        backgroundPosition: 'center 80px',
+        backgroundRepeat: 'no-repeat',
+        minHeight: 'calc(100vh - 200px)'
+      }}>
+        <div className="space-y-10">
 
-        {/* Contract Error Alert */}
-        {contractError && (
-          <div className="mb-6 p-4 border-2 border-black bg-white">
-            <div className="flex-1">
-              <h3 className="text-sm font-mono font-bold mb-2">ERROR: CONTRACT</h3>
-              <div className="text-sm text-gray-700 mb-3">
-                {contractError}
+          {/* Manifesto Text */}
+          <div>
+            <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} />
+          </div>
+
+          {/* Cards below manifesto */}
+          <div className="space-y-8">
+
+            {/* Stats & Sign Button */}
+            <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
+              <div className="text-center mb-8">
+                <p className="text-6xl font-medium text-gray-900 mb-3" style={{ lineHeight: '1em' }}>
+                  {totalPledges.toLocaleString()}
+                </p>
+                <p className="text-gray-700 text-sm font-normal" style={{ lineHeight: '1.1em' }}>
+                  {totalPledges === 1 ? 'signature' : 'signatures'}
+                </p>
               </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    setContractError(null)
-                    setHasLoadedOnce(false)
-                    loadInitialData()
-                  }}
-                  disabled={loading}
-                  className="btn-minimal text-xs"
-                >
-                  RETRY
-                </button>
-                <button
-                  onClick={async () => {
-                    if (contract) {
-                      try {
-                        const info = await contract.verifyContract()
-                        console.log('Contract Debug Info:', info)
-                        alert(`Debug Info:\n\nAddress: ${contract.address}\nExists: ${info.exists}\nHas Interface: ${info.hasInterface}\n${info.error ? `Error: ${info.error}` : ''}`)
-                      } catch (error) {
-                        console.error('Failed to get contract info:', error)
-                        alert('Failed to get debug info. Check console for details.')
+
+              <SignatureButton
+                pledgeStatus={pledgeStatus}
+                onSign={handleSign}
+                loading={pledging}
+                connected={!!account}
+              />
+            </div>
+
+            {/* Address Checker */}
+            <AddressChecker onCheck={handleCheckAddress} onResolveENS={handleResolveENS} />
+
+            {/* Census Info */}
+            <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
+              <h3 className="text-xl font-medium text-gray-900 mb-6 flex items-center gap-2" style={{ lineHeight: '1.1em' }}>
+                <span>🌳</span> Cryptographic Census
+              </h3>
+
+              {/* Explanation */}
+              <div className="mb-6">
+                <p className="text-sm text-gray-800 font-normal" style={{ lineHeight: '1.1em' }}>
+                  Each new address is added to an on-chain <strong className="font-medium">zk-friendly Merkle tree</strong>, creating a
+                  cryptographic structure that groups all signers. This census can be used by voting applications
+                  as a <strong className="font-medium">trustless authentication mechanism</strong>, allowing manifesto
+                  signers to participate in governance.
+                </p>
+              </div>
+
+              {/* Stats */}
+              <div className="space-y-4 text-sm">
+                <div>
+                  <p className="text-gray-700 mb-2 font-medium">Current Root Hash</p>
+                  <p className="font-mono text-xs text-gray-800 break-all bg-white/60 p-3 rounded-lg border border-[#D4C4AC]">
+                    {censusRoot !== '0' ? `0x${BigInt(censusRoot).toString(16).padStart(64, '0')}` : 'Not yet initialized'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-700 mb-2 font-medium">Contract Address</p>
+                  <a
+                    href={(() => {
+                      const explorers: Record<number, string> = {
+                        1: 'etherscan.io',
+                        11155111: 'sepolia.etherscan.io',
+                        8453: 'basescan.org',
+                        42161: 'arbiscan.io',
+                        10: 'optimistic.etherscan.io',
+                        137: 'polygonscan.com'
                       }
-                    }
-                  }}
-                  disabled={loading}
-                  className="btn-minimal text-xs"
-                >
-                  DEBUG
-                </button>
+                      const explorer = explorers[CHAIN_ID] || 'etherscan.io'
+                      return `https://${explorer}/address/${CONTRACT_ADDRESS}`
+                    })()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-blue-600 hover:text-blue-800 underline break-all block"
+                  >
+                    {CONTRACT_ADDRESS}
+                  </a>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Network</p>
+                  <p className="text-gray-800">
+                    {(() => {
+                      const networks: Record<number, string> = {
+                        1: 'Ethereum Mainnet',
+                        11155111: 'Sepolia Testnet',
+                        8453: 'Base',
+                        42161: 'Arbitrum One',
+                        10: 'Optimism',
+                        137: 'Polygon'
+                      }
+                      return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
+                    })()}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8">
-          {/* Sidebar - Appears first on mobile, right on desktop */}
-          <div className="order-1 lg:order-2 space-y-4">
-            {/* Network Info - Collapsible */}
-            <div className="card overflow-hidden">
-              <button
-                onClick={() => setShowNetworkInfo(!showNetworkInfo)}
-                className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
-              >
-                <span className="text-sm uppercase tracking-wider">🌐 [ NETWORK ]</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showNetworkInfo ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showNetworkInfo && (
-                <div className="p-4 border-t border-gray-200">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">Chain ID</span>
-                      <span className="font-mono font-medium">{CONTRACT_CONFIG.chainId}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600">Contract</span>
-                      <ContractAddress address={CONTRACT_CONFIG.address} />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Collections - Collapsible */}
-            <div className="card overflow-hidden">
-              <button
-                onClick={() => setShowCollections(!showCollections)}
-                className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
-              >
-                <span className="text-sm uppercase tracking-wider">🖼️ [ NFT COLLECTIONS ({collections.length}) ]</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showCollections ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showCollections && (
-                <div className="p-4 border-t border-gray-200">
-
-                {collections.length === 0 ? (
-                  <div className="text-center py-6 text-sm text-gray-500">
-                    {loading ? 'Loading...' : 'No collections'}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {collections.map((collection, index) => (
-                      <div key={index} className="border border-gray-200 hover:border-black p-3 transition-colors bg-white">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 border border-black flex items-center justify-center text-xs font-mono font-bold">
-                              {index}
-                            </div>
-                            <div>
-                              <div className="font-medium text-sm">Collection {index}</div>
-                              <div className="text-xs text-gray-500 mt-0.5">
-                                {collection.active ? (
-                                  <span className="inline-flex items-center gap-1 terminal-accent">
-                                    <span className="w-1.5 h-1.5 bg-current rounded-full"></span>
-                                    Active
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-gray-400">
-                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                                    Inactive
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <span className="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300">
-                            ERC721
-                          </span>
-                        </div>
-                        <div className="text-xs">
-                          <CollectionAddress address={collection.token} />
-                        </div>
-                        {collection.totalDelegated > 0 && (
-                          <div className="text-xs text-gray-600 flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
-                            <span className="font-mono terminal-accent">{collection.totalDelegated}</span> delegated
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                </div>
-              )}
-            </div>
-
-            {/* Census Tree - Collapsible */}
-            <div className="card overflow-hidden">
-              <button
-                onClick={() => setShowCensusTree(!showCensusTree)}
-                className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
-              >
-                <span className="text-sm uppercase tracking-wider">🌳 [ CENSUS TREE ]</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showCensusTree ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showCensusTree && (
-                <div className="p-4 border-t border-gray-200 space-y-4">
-                  {/* Census Root */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Root</label>
-                      <button
-                        onClick={refreshCensusRoot}
-                        disabled={isRefreshingCensusRoot || !contract || !!contractError}
-                        className="p-1 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Refresh census root"
-                      >
-                        <svg
-                          className={`w-3.5 h-3.5 ${isRefreshingCensusRoot ? 'animate-spin' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="p-2 bg-gray-50 border border-gray-200">
-                      {contractError ? (
-                        <span className="text-gray-500 text-xs">N/A</span>
-                      ) : censusRoot === undefined || censusRoot === null || censusRoot === '' ? (
-                        <span className="text-gray-500 text-xs">Loading...</span>
-                      ) : censusRoot === '0' || BigInt(censusRoot) === BigInt(0) ? (
-                        <span className="text-gray-500 font-mono text-xs">0x0</span>
-                      ) : (
-                        <CensusRoot root={censusRoot} />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Your Weight */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Your Weight</label>
-                    <div className="text-center py-2">
-                      <div className="text-3xl font-mono font-bold terminal-accent">
-                        {formatNumber(userWeight || 0)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tree Statistics */}
-                  {(treeData || isReconstructingTree) && (
-                    <div className="border-t border-gray-100 pt-4">
-                      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 block">Tree Stats</label>
-                      {isReconstructingTree ? (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Loading tree data...</span>
-                          </div>
-                        </div>
-                      ) : treeData && treeData.nodes.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-600">Participants</span>
-                            <span className="font-mono font-medium terminal-accent">{formatNumber(treeData.totalParticipants)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-600">Leaves</span>
-                            <span className="font-mono font-medium">{formatNumber(treeData.nodes.length)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-600">Depth</span>
-                            <span className="font-mono font-medium">{Math.ceil(Math.log2(treeData.nodes.length || 1))}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-600">Total Weight</span>
-                            <span className="font-mono font-medium">{formatNumber(treeData.nodes.reduce((sum, node) => sum + node.weight, 0))}</span>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="border-t border-gray-100 pt-4 space-y-2">
-                    <button
-                      onClick={() => setShowTreeVisualization(true)}
-                      disabled={!contract || !!contractError}
-                      className="btn-minimal w-full text-xs"
-                    >
-                      VISUALIZE TREE
-                    </button>
-                    <button
-                      onClick={() => setShowValidateCensusRoot(true)}
-                      disabled={!contract || !!contractError}
-                      className="btn-minimal w-full text-xs"
-                    >
-                      VALIDATE ROOT
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Participants - Collapsible */}
-            <div className="card overflow-hidden">
-              <button
-                onClick={() => setShowDelegators(!showDelegators)}
-                className="card-header w-full flex items-center justify-between hover:bg-gray-900 transition-colors"
-              >
-                <span className="text-sm uppercase tracking-wider">👥 [ PARTICIPANTS ]</span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showDelegators ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showDelegators && (
-                <div className="p-4 border-t border-gray-200 space-y-4">
-                  {/* Stats Display */}
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 block">
-                      Unique Addresses
-                    </label>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div className="text-center py-3 border border-gray-200 bg-gray-50">
-                        <div className="text-2xl font-mono font-bold terminal-accent">
-                          {delegatorStats?.totalUnique ?? '-'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">Total Ever</div>
-                      </div>
-                      <div className="text-center py-3 border border-gray-200 bg-gray-50">
-                        <div className="text-2xl font-mono font-bold">
-                          {delegatorStats?.totalActive ?? '-'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">Active Now</div>
-                      </div>
-                    </div>
-                    <div className="text-center py-3 border border-gray-200 bg-gray-50">
-                      <div className="text-2xl font-mono font-bold terminal-accent">
-                        {delegatorStats?.totalWeight ?? '-'}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">NFTs Delegated</div>
-                    </div>
-                  </div>
-
-                  {/* View Details Button */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <button
-                      onClick={() => setShowDelegatorsModal(true)}
-                      disabled={!delegatorStats}
-                      className="btn-accent w-full text-xs"
-                    >
-                      VIEW ALL PARTICIPANTS
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Main Content - Appears second on mobile, left on desktop */}
-          <div className="order-2 lg:order-1 lg:col-span-2 space-y-6">
-            {/* Show minting call-to-action if user has no NFTs */}
-            {!contractError && hasLoadedOnce && userNFTs.length === 0 && (
-              <MintingCallToAction />
-            )}
-
-            {/* New Delegation Manager */}
-            <DelegationManager
-              contract={contract}
-              userNFTs={userNFTs}
-              userAddress={address}
-              onDataRefresh={loadInitialData}
-              loading={loading}
-              refreshTrigger={refreshTrigger}
-            />
           </div>
         </div>
       </main>
 
-      {/* Tree Visualization Modal */}
-      <TreeVisualizationModal
-        isOpen={showTreeVisualization}
-        onClose={() => setShowTreeVisualization(false)}
-        treeNodes={treeData?.nodes || []}
-        censusRoot={censusRoot || '0'}
-        isLoading={isReconstructingTree}
-        onReconstructTree={handleReconstructTree}
-      />
-
-      {/* Validate Census Root Modal */}
-      <ValidateCensusRootModal
-        isOpen={showValidateCensusRoot}
-        onClose={() => setShowValidateCensusRoot(false)}
-        onValidate={handleValidateCensusRoot}
-      />
-
-      {/* Delegators Modal */}
-      <DelegatorsModal
-        isOpen={showDelegatorsModal}
-        onClose={() => setShowDelegatorsModal(false)}
-      />
-
-      {/* Loading Modal - Show during NFT discovery and refresh */}
-      <LoadingModal
-        isOpen={loading}
-        message={!hasLoadedOnce ? "DISCOVERING YOUR NFTs..." : "REFRESHING DATA..."}
-      />
+      {/* Footer */}
+      <footer className="bg-[#dbc2a5] border-t border-[#D4C4AC] mt-16 py-12">
+        <div className="max-w-[1008px] mx-auto px-6">
+          <div className="text-center text-gray-800 space-y-3">
+            <p className="text-base italic font-normal" style={{ lineHeight: '1.1em' }}>
+              Made with love by <a href="https://vocdoni.io" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900">Vocdoni</a>
+            </p>
+            <p className="text-xs text-gray-600 font-normal" style={{ lineHeight: '1.1em' }}>
+              <a href="https://github.com/vocdoni/davinci-onchain-census/tree/manifesto" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-800">Source Code</a>
+              {' · '}
+              License AGPLv3
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
-  )
-}
-
-function App() {
-  return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <DashboardContent />
-        <Toaster position="bottom-right" />
-      </QueryClientProvider>
-    </ErrorBoundary>
   )
 }
 

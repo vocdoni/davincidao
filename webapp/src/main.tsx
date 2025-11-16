@@ -3,11 +3,8 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles/globals.css'
 
-// Initialize AppKit
-import './lib/appkit'
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 )

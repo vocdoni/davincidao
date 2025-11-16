@@ -20,7 +20,16 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        mono: ['Fragment Mono', 'monospace'],
+      },
       colors: {
+        davinci: {
+          beige: '#ebd2b2',
+          brown: '#856e50',
+          'brown-dark': '#7A6746',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

@@ -1,75 +1,59 @@
-"""Account with voting weight from delegated NFTs (delegates - receivers)"""
+"""Account entity for weight tracking"""
 type Account @entity(immutable: false) {
-  id: ID!                              # address (lowercase)
-  address: Bytes!                      # original address
-  weight: BigInt!                      # current weight (number of delegated NFTs)
-  lastUpdatedAt: BigInt!               # timestamp
-  lastUpdatedBlock: BigInt!            # block number
-  firstInsertedBlock: BigInt!          # block when first inserted into tree (weight went from 0 to >0)
-  firstInsertedAt: BigInt!             # timestamp when first inserted
-  treeIndex: BigInt!                   # index in merkle tree (order of insertion, -1 if weight is 0)
-  receivedDelegations: [TokenDelegation!]! @derivedFrom(field: "delegateAccount")
+  id: ID!                    # address (lowercase)
+  address: Bytes!            # original address
+  currentWeight: BigInt!     # current weight (always 1 for this manifesto)
+  weightChangeEvents: [WeightChangeEvent!]! @derivedFrom(field: "account")
 }
 
-"""Weight change event - tracks all tree operations in chronological order"""
-type WeightChangeEvent @entity(immutable: true) {
-  id: ID!                              # txHash-logIndex
-  account: Account!                    # account whose weight changed
-  previousWeight: BigInt!              # weight before change
-  newWeight: BigInt!                   # weight after change
-  blockNumber: BigInt!                 # block number
-  blockTimestamp: BigInt!              # timestamp
-  transactionHash: Bytes!              # transaction hash
-  logIndex: BigInt!                    # log index for ordering within block
-}
-
-"""Unique wallet addresses that have performed at least one delegation (delegators - senders)"""
-type Delegator @entity(immutable: false) {
-  id: ID!                              # address (lowercase)
-  address: Bytes!                      # original address
-  totalDelegationsMade: BigInt!        # total number of NFTs this address has delegated (current active count)
-  totalDelegationsEver: BigInt!        # total number of delegation actions ever made (including undelegated)
-  firstDelegatedAt: BigInt!            # timestamp of first delegation
-  firstDelegatedBlock: BigInt!         # block number of first delegation
-  lastDelegatedAt: BigInt!             # timestamp of most recent delegation
-  lastDelegatedBlock: BigInt!          # block number of most recent delegation
-  delegations: [TokenDelegation!]! @derivedFrom(field: "delegator")
-}
-
-"""NFT delegation status"""
-type TokenDelegation @entity(immutable: false) {
-  id: ID!                              # ${nftIndex}-${tokenId}
-  nftIndex: BigInt!                    # collection index
-  tokenId: BigInt!                     # token ID
-  delegate: Bytes!                     # current delegate address (zero if undelegated)
-  delegateAccount: Account             # Account entity (null if undelegated)
-  owner: Bytes!                        # token owner at time of last delegation/undelegation
-  delegator: Delegator                 # Delegator entity (null if undelegated)
-  delegatorAddress: Bytes!             # Owner address for quick reference
-  isDelegated: Boolean!                # true if currently delegated
-  delegatedAt: BigInt!                 # timestamp of last delegation
-  delegatedBlock: BigInt!              # block of last delegation
-  transactionHash: Bytes!
+"""Address that has pledged to The Trustless Manifesto"""
+type Signer @entity(immutable: false) {
+  id: ID!                    # address (lowercase)
+  address: Bytes!            # original address
+  pledgeTimestamp: BigInt!   # when they pledged (unix timestamp)
+  pledgeBlock: BigInt!       # block number of pledge
+  transactionHash: Bytes!    # tx hash of pledge
+  treeIndex: BigInt!         # index in merkle tree (order of insertion)
 }
 
 """Census root snapshot (immutable - each update creates new entry)"""
 type CensusRoot @entity(immutable: true) {
-  id: ID!                              # txHash-logIndex
-  root: BigInt!                        # Merkle root
-  updater: Bytes!                      # address that updated the root
-  blockNumber: BigInt!
-  blockTimestamp: BigInt!
-  transactionHash: Bytes!
+  id: ID!                    # txHash-logIndex
+  root: BigInt!              # merkle root value
+  blockNumber: BigInt!       # block number
+  blockTimestamp: BigInt!    # timestamp
+  transactionHash: Bytes!    # tx hash
+  pledgeCount: BigInt!       # total pledges at this root
 }
 
 """Global statistics"""
 type GlobalStats @entity(immutable: false) {
-  id: ID!                              # "global"
-  totalDelegations: BigInt!            # total active delegations
-  totalAccounts: BigInt!               # accounts with weight > 0 (delegates)
-  totalWeight: BigInt!                 # sum of all weights
-  totalUniqueDelegators: BigInt!       # unique addresses that have ever delegated
-  totalActiveDelegators: BigInt!       # unique addresses with active delegations
-  lastUpdatedAt: BigInt!
-  nextTreeIndex: BigInt!               # next available tree index (counter for insertions)
+  id: ID!                    # "global"
+  totalPledges: BigInt!      # total number of pledges
+  lastPledgeAt: BigInt!      # timestamp of last pledge
+  lastPledgeBlock: BigInt!   # block of last pledge
+  currentRoot: BigInt!       # current census root
+  nextTreeIndex: BigInt!     # next tree index (counter for new insertions)
+}
+
+"""Pledge event - tracks all pledges in chronological order"""
+type PledgeEvent @entity(immutable: true) {
+  id: ID!                    # txHash-logIndex
+  signer: Signer!            # who pledged
+  timestamp: BigInt!         # when (block timestamp)
+  blockNumber: BigInt!       # block number
+  transactionHash: Bytes!    # tx hash
+  logIndex: BigInt!          # for ordering within block
+}
+
+"""Weight change event - required for offchain census reconstruction"""
+type WeightChangeEvent @entity(immutable: true) {
+  id: ID!                    # txHash-logIndex
+  account: Account!          # account whose weight changed
+  previousWeight: BigInt!    # weight before change (0 for new accounts)
+  newWeight: BigInt!         # weight after change (always 1 for pledges)
+  blockNumber: BigInt!       # block number
+  blockTimestamp: BigInt!    # block timestamp
+  transactionHash: Bytes!    # tx hash
+  logIndex: BigInt!          # for ordering within block
 }
