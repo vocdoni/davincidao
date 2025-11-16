@@ -23,7 +23,7 @@ contract WeAreNotSpectatorsCensusTest is Test {
     function test_ManifestoMetadata() public view {
         assertEq(census.TITLE(), "We Are Not Spectators: A Manifesto for Collective Freedom");
         assertEq(census.AUTHORS(), "DAVINCI.vote Community");
-        assertEq(census.DATE(), "2025-11-15");
+        assertEq(census.DATE(), "2025-11-16");
     }
 
     function test_ManifestoTextNotEmpty() public view {

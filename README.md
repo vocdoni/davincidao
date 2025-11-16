@@ -114,7 +114,7 @@ uint256 leaf = (uint256(uint160(address)) << 88) | 1
 - Top 160 bits: Ethereum address
 - Bottom 88 bits: Weight (always 1 for all signers)
 
-This format maintains compatibility with the original delegation system while simplifying the logic.
+This format maintains compatibility with the DAVINCI delegation system.
 
 ## Root History
 

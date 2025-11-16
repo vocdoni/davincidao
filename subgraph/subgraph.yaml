@@ -8,11 +8,11 @@ indexerHints:
 dataSources:
   - kind: ethereum/contract
     name: WeAreNotSpectatorsManifestoCensus
-    network: base
+    network: mainnet
     source:
-      address: "0xd2ce4B4D8865c8F3650b942662854A1bbDb6F363"
+      address: "0x82d9373Fe03fa66d133c56732DBE0ecCc7672Df1"
       abi: WeAreNotSpectatorsManifestoCensus
-      startBlock: 38229780
+      startBlock: 23813322
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

@@ -5,24 +5,57 @@ interface ManifestoDisplayProps {
   loading?: boolean
 }
 
-// Parse manifesto text with simple markdown-like formatting
+// Parse manifesto text with proper paragraph handling
 function parseManifestoText(text: string) {
   const lines = text.split('\n')
   const elements: JSX.Element[] = []
+  let currentParagraph: string[] = []
+  let elementIndex = 0
 
-  lines.forEach((line, index) => {
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      const paragraphText = currentParagraph.join('\n')
+      const parts = paragraphText.split(/(\*\*.*?\*\*)/)
+
+      elements.push(
+        <p key={`p-${elementIndex++}`} className="mb-4 text-left text-lg" style={{
+          fontFamily: "'EB Garamond', serif",
+          lineHeight: '1.4em',
+          color: '#1a1410',
+          fontWeight: 400
+        }}>
+          {parts.map((part, i) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+              return <strong key={i} style={{ fontWeight: 600, color: '#0a0806' }}>{part.slice(2, -2)}</strong>
+            }
+            // Replace \n with <br> for line breaks within paragraph
+            return part.split('\n').map((segment, j, arr) => (
+              <span key={`${i}-${j}`}>
+                {segment}
+                {j < arr.length - 1 && <br />}
+              </span>
+            ))
+          })}
+        </p>
+      )
+      currentParagraph = []
+    }
+  }
+
+  lines.forEach((line) => {
     // Handle headers (lines starting with #)
     if (line.startsWith('# ')) {
+      flushParagraph()
       const title = line.replace('# ', '')
       elements.push(
         <h1
-          key={index}
-          className="text-center mb-10 mt-2"
+          key={`h-${elementIndex++}`}
+          className="text-center mb-8 mt-2"
           style={{
             fontFamily: "'EB Garamond', serif",
             fontSize: 'clamp(1.25rem, 3.5vw, 2rem)',
             fontWeight: 800,
-            color: '#2a1f0f',
+            color: '#0a0806',
             letterSpacing: '0.03em',
             textTransform: 'uppercase',
             lineHeight: '1.3em',
@@ -37,42 +70,31 @@ function parseManifestoText(text: string) {
     }
     // Handle subheaders (lines starting with ##)
     else if (line.startsWith('## ')) {
+      flushParagraph()
       elements.push(
-        <h4 key={index} className="text-2xl mt-8 mb-4 text-left" style={{
+        <h4 key={`h4-${elementIndex++}`} className="text-2xl mt-8 mb-4 text-left" style={{
           fontFamily: "'EB Garamond', serif",
           fontWeight: 600,
           lineHeight: '1.2em',
-          color: '#3a2f1f',
+          color: '#1a1410',
           letterSpacing: '0.01em'
         }}>
           {line.replace('## ', '')}
         </h4>
       )
     }
-    // Handle empty lines
+    // Handle empty lines (paragraph separator)
     else if (line.trim() === '') {
-      elements.push(<div key={index} className="h-2"></div>)
+      flushParagraph()
     }
-    // Handle regular text with bold (**text**)
+    // Accumulate lines for current paragraph
     else {
-      const parts = line.split(/(\*\*.*?\*\*)/)
-      elements.push(
-        <p key={index} className="mb-2 text-left text-lg" style={{
-          fontFamily: "'EB Garamond', serif",
-          lineHeight: '1.5em',
-          color: '#3a2f1f',
-          fontWeight: 400
-        }}>
-          {parts.map((part, i) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={i} style={{ fontWeight: 600, color: '#2a1f0f' }}>{part.slice(2, -2)}</strong>
-            }
-            return <span key={i}>{part}</span>
-          })}
-        </p>
-      )
+      currentParagraph.push(line)
     }
   })
+
+  // Flush any remaining paragraph
+  flushParagraph()
 
   return elements
 }
@@ -129,8 +151,7 @@ export function ManifestoDisplay({ metadata, loading }: ManifestoDisplayProps) {
       {/* Manifesto Content */}
       <div className="max-w-4xl mx-auto relative z-10">
         <div className="text-base md:text-lg" style={{
-          textShadow: '0 1px 1px rgba(255,255,255,0.5)',
-          color: '#3a2f1f'
+          textShadow: '0 1px 1px rgba(255,255,255,0.3)'
         }}>
           {parseManifestoText(metadata.manifestoText)}
         </div>

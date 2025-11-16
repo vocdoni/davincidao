@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { BrowserProvider, JsonRpcProvider } from 'ethers'
 import { toast, Toaster } from 'sonner'
 import { ManifestoContract } from '~/lib/manifesto-contract'
-import { initSubgraphClient, getTotalPledges, getSigner } from '~/lib/subgraph-client'
+import { initSubgraphClient, getSigner } from '~/lib/subgraph-client'
 import { ManifestoDisplay } from '~/components/manifesto/ManifestoDisplay'
 import { SignatureButton } from '~/components/manifesto/SignatureButton'
 import { AddressChecker } from '~/components/manifesto/AddressChecker'
@@ -23,24 +23,20 @@ function App() {
   const [pledging, setPledging] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
 
-  // Initialize subgraph on mount
+  // Initialize subgraph on mount (optional, only for tree index data)
   useEffect(() => {
     if (SUBGRAPH_ENDPOINT) {
       initSubgraphClient(SUBGRAPH_ENDPOINT)
-      loadSubgraphData()
     }
-    // Always load census data from contract
+    // Always load census data from contract (includes pledge count)
     loadCensusData()
   }, [])
 
-  // Periodic updates for census data and signature count (every 15 seconds)
+  // Periodic updates for census data (every 15 seconds)
+  // Note: We get pledge count directly from contract, no GraphQL needed
   useEffect(() => {
     const interval = setInterval(() => {
-      // Update census root and total pledges
       loadCensusData()
-      if (SUBGRAPH_ENDPOINT) {
-        loadSubgraphData()
-      }
     }, 15000) // 15 seconds
 
     return () => clearInterval(interval)
@@ -68,7 +64,15 @@ function App() {
 
       // Multiple RPC endpoints for fallback
       const rpcEndpoints: Record<number, string[]> = {
-        1: ['https://ethereum-rpc.publicnode.com'],
+        1: [
+          'https://eth.llamarpc.com',
+          'https://ethereum-rpc.publicnode.com',
+          'https://rpc.mevblocker.io',
+          'https://0xrpc.io/eth',
+          'https://eth1.lava.build',
+          'https://eth.blockrazor.xyz',
+          'https://eth-mainnet.public.blastapi.io'
+        ],
         11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
         8453: [
           'https://base.llamarpc.com',
@@ -84,7 +88,7 @@ function App() {
         137: ['https://polygon-rpc.com']
       }
 
-      const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+      const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
 
       for (let i = 0; i < rpcs.length; i++) {
         const rpcUrl = rpcs[i]
@@ -174,10 +178,18 @@ function App() {
     }
   }, [account])
 
-  // Load census data from contract
+  // Load census data from contract (includes pledge count)
   const loadCensusData = async () => {
     const rpcEndpoints: Record<number, string[]> = {
-      1: ['https://ethereum-rpc.publicnode.com'],
+      1: [
+        'https://eth.llamarpc.com',
+        'https://ethereum-rpc.publicnode.com',
+        'https://rpc.mevblocker.io',
+        'https://0xrpc.io/eth',
+        'https://eth1.lava.build',
+        'https://eth.blockrazor.xyz',
+        'https://eth-mainnet.public.blastapi.io'
+      ],
       11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
       8453: [
         'https://base.llamarpc.com',
@@ -193,15 +205,19 @@ function App() {
       137: ['https://polygon-rpc.com']
     }
 
-    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
 
     for (const rpcUrl of rpcs) {
       try {
         const provider = new JsonRpcProvider(rpcUrl)
         const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
         const info = await readOnlyContract.getCensusInfo()
+
+        // Update state with contract data
         setCensusRoot(info.root)
-        console.log('✅ Census data loaded from', rpcUrl)
+        setTotalPledges(info.totalPledges)
+
+        console.log('✅ Census data loaded from contract:', rpcUrl, `(${info.totalPledges} pledges)`)
         return // Success
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error'
@@ -215,31 +231,35 @@ function App() {
     toast.error('Failed to load census data. Please refresh the page.')
   }
 
-  // Load subgraph data
-  const loadSubgraphData = async () => {
-    try {
-      const total = await getTotalPledges()
-      setTotalPledges(total)
-    } catch (error) {
-      console.error('Error loading subgraph data:', error)
-      toast.error('Failed to load census data')
-    }
-  }
-
   // Resolve ENS name to address
   const handleResolveENS = async (ensName: string): Promise<string | null> => {
-    try {
-      // ENS is only available on Mainnet, always use Mainnet for resolution
-      const mainnetRpcUrl = 'https://ethereum-rpc.publicnode.com'
-      const provider = new JsonRpcProvider(mainnetRpcUrl)
+    // ENS is only available on Mainnet, always use Mainnet for resolution
+    const mainnetRpcs = [
+      'https://eth.llamarpc.com',
+      'https://ethereum-rpc.publicnode.com',
+      'https://rpc.mevblocker.io',
+      'https://0xrpc.io/eth',
+      'https://eth1.lava.build',
+      'https://eth.blockrazor.xyz',
+      'https://eth-mainnet.public.blastapi.io'
+    ]
 
-      // Resolve ENS name
-      const resolved = await provider.resolveName(ensName)
-      return resolved
-    } catch (error) {
-      console.error('Error resolving ENS:', error)
-      return null
+    for (const rpcUrl of mainnetRpcs) {
+      try {
+        const provider = new JsonRpcProvider(rpcUrl)
+        const resolved = await provider.resolveName(ensName)
+        if (resolved) {
+          console.log('✅ ENS resolved from', rpcUrl)
+          return resolved
+        }
+      } catch (error) {
+        console.error(`❌ ENS resolution from ${rpcUrl} failed:`, error)
+        // Continue to next RPC
+      }
     }
+
+    console.error('Failed to resolve ENS from all RPCs')
+    return null
   }
 
   // Check address pledge status
@@ -277,7 +297,15 @@ function App() {
 
     // Fallback to read-only RPCs
     const rpcEndpoints: Record<number, string[]> = {
-      1: ['https://ethereum-rpc.publicnode.com'],
+      1: [
+        'https://eth.llamarpc.com',
+        'https://ethereum-rpc.publicnode.com',
+        'https://rpc.mevblocker.io',
+        'https://0xrpc.io/eth',
+        'https://eth1.lava.build',
+        'https://eth.blockrazor.xyz',
+        'https://eth-mainnet.public.blastapi.io'
+      ],
       11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
       8453: [
         'https://base.llamarpc.com',
@@ -293,7 +321,7 @@ function App() {
       137: ['https://polygon-rpc.com']
     }
 
-    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://ethereum-rpc.publicnode.com']
+    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
 
     for (const rpcUrl of rpcs) {
       try {
@@ -357,7 +385,15 @@ function App() {
         chainId: '0x1',
         chainName: 'Ethereum Mainnet',
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://mainnet.infura.io/v3/'],
+        rpcUrls: [
+          'https://eth.llamarpc.com',
+          'https://ethereum-rpc.publicnode.com',
+          'https://rpc.mevblocker.io',
+          'https://0xrpc.io/eth',
+          'https://eth1.lava.build',
+          'https://eth.blockrazor.xyz',
+          'https://eth-mainnet.public.blastapi.io'
+        ],
         blockExplorerUrls: ['https://etherscan.io']
       },
       8453: { // Base
@@ -455,14 +491,6 @@ function App() {
           const status = await contractInstance.getPledgeStatus(address)
           setPledgeStatus(status)
 
-          // Check subgraph for signer status
-          if (SUBGRAPH_ENDPOINT) {
-            const signerData = await getSigner(address)
-            if (signerData && !status.hasPledged) {
-              console.warn('Subgraph/contract sync issue detected')
-            }
-          }
-
           toast.success('Wallet connected')
           setLoadingContract(false)
           return
@@ -502,16 +530,6 @@ function App() {
       const status = await contractInstance.getPledgeStatus(address)
       setPledgeStatus(status)
 
-      // Check subgraph for signer status
-      if (SUBGRAPH_ENDPOINT) {
-        const signerData = await getSigner(address)
-        if (signerData && !status.hasPledged) {
-          // Sync issue - subgraph says they pledged but contract doesn't
-          // Trust the contract
-          console.warn('Subgraph/contract sync issue detected')
-        }
-      }
-
       toast.success('Wallet connected')
     } catch (error) {
       console.error('Error connecting wallet:', error)
@@ -546,9 +564,8 @@ function App() {
       const status = await contract.getPledgeStatus(account)
       setPledgeStatus(status)
 
-      // Reload stats after a delay (wait for blockchain)
+      // Reload census data after a delay (wait for blockchain to confirm)
       setTimeout(() => {
-        loadSubgraphData()
         loadCensusData()
       }, 5000)
     } catch (error) {
@@ -592,7 +609,17 @@ function App() {
             Loading Manifesto...
           </h2>
           <p className="text-sm text-gray-700 font-normal" style={{ lineHeight: '1.1em' }}>
-            Connecting to Base network
+            Connecting to {(() => {
+              const networks: Record<number, string> = {
+                1: 'Ethereum Mainnet',
+                11155111: 'Sepolia Testnet',
+                8453: 'Base',
+                42161: 'Arbitrum One',
+                10: 'Optimism',
+                137: 'Polygon'
+              }
+              return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
+            })()}
           </p>
         </div>
       </div>

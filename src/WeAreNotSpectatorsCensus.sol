@@ -18,7 +18,7 @@ import {ICensusValidator} from "./ICensusValidator.sol";
 ///      - Circular buffer root history (last 100 roots)
 ///      - ICensusValidator interface for external contract integration
 ///      - Immutable manifesto text stored on-chain
-/// @author DavinciDAO / Vocdoni
+/// @author Vocdoni
 contract WeAreNotSpectatorsCensus is ICensusValidator {
     using InternalLeanIMT for LeanIMTData;
     using CircularBuffer for CircularBuffer.Bytes32CircularBuffer;
@@ -27,34 +27,57 @@ contract WeAreNotSpectatorsCensus is ICensusValidator {
 
     string public constant TITLE = "We Are Not Spectators: A Manifesto for Collective Freedom";
     string public constant AUTHORS = "DAVINCI.vote Community";
-    string public constant DATE = "2025-11-15";
+    string public constant DATE = "2025-11-16";
 
     // ========= Manifesto Text =========
 
-    string public constant MANIFESTO = "# We Are Not Spectators: A Manifesto for Collective Freedom\n" "\n"
-        "We were promised democracy.\n" "\n" "What we got was permission.\n" "\n"
-        "Permission to choose between options we didn't create.\n" "\n" "Permission to speak only when spoken to.\n"
-        "\n" "Permission to exist inside systems built to contain us.\n" "\n" "They told us this was freedom.\n" "\n"
-        "But freedom without agency is theater.\n" "\n" "We scroll. We vote. We sign petitions.\n" "\n"
-        "And still, the world burns, inequality grows, and trust collapses.\n" "\n"
-        "The threads that once held us together are tearing apart.\n" "\n" "**Enough.**\n" "\n"
-        "We refuse to be spectators to our own future.\n" "\n"
-        "We refuse to mistake representation for participation.\n" "\n"
-        "The systems that failed us are not the only ones we have to live by.\n" "\n"
-        "Freedom begins with participation, not obedience.\n" "\n"
-        "Every human deserves a voice in the systems they depend on,\n" "\n"
-        "the platforms they use, the policies that shape them,\n" "\n" "the future they'll inherit.\n" "\n"
-        "**We believe privacy is not a feature, it's a foundation.**\n" "\n"
-        "The right to exist, think, and connect without surveillance.\n" "\n"
-        "Privacy is the space where dissent, creativity, and democracy are born.\n" "\n"
-        "**We believe authority must be accountable, and power transparent.**\n" "\n"
-        "Governance is not something done to us; it's something we do, together.\n" "\n"
-        "**We believe technology is a tool, not a master.**\n" "\n" "Like language, it must belong to everyone,\n" "\n"
-        "a public good to build trust, not extract it.\n" "\n" "We believe in self-sovereign infrastructure,\n"
-        "\n" "transparency as truth,\n" "\n" "and collaboration as strength.\n" "\n"
-        "**We are the builders of the commons.**\n" "\n" "The citizens who refuse to be spectators.\n" "\n"
-        "The dreamers who turn frustration into invention.\n" "\n" "The communities who turn ideas into action.\n" "\n"
-        "**Because the future we live in depends on the governance we achieve today.**\n" "\n" "**#WeAreNotSpectators**";
+    string public constant MANIFESTO =
+        "# We Are Not Spectators: A Manifesto for Collective Freedom\n"
+        "\n"
+        "We were promised democracy.\n"
+        "What we got was permission.\n"
+        "Permission to choose between options we didn't create.\n"
+        "Permission to speak only when spoken to.\n"
+        "\n"
+        "Permission to exist inside systems built to contain us.\n"
+        "They told us this was freedom.\n"
+        "But freedom without agency is theater.\n"
+        "We scroll. We vote. We sign petitions.\n"
+        "And still, the world burns, inequality grows, and trust collapses.\n"
+        "The threads that once held us together are tearing apart.\n"
+        "**Enough.**\n"
+        "\n"
+        "We refuse to be spectators to our own future.\n"
+        "We refuse to mistake representation for participation.\n"
+        "The systems that failed us are not the only ones we have to live by.\n"
+        "Freedom begins with participation, not obedience.\n"
+        "\n"
+        "Every human deserves a voice in the systems they depend on,\n"
+        "the platforms they use, the policies that shape them,\n"
+        "the future they'll inherit.\n"
+        "\n"
+        "**We believe privacy is not a feature, it's a foundation.**\n"
+        "The right to exist, think, and connect without surveillance.\n"
+        "Privacy is the space where dissent, creativity, and democracy are born.\n"
+        "\n"
+        "**We believe authority must be accountable, and power transparent.**\n"
+        "Governance is not something done to us; it's something we do, together.\n"
+        "\n"
+        "**We believe technology is a tool, not a master.**\n"
+        "Like language, it must belong to everyone,\n"
+        "a public good to build trust, not extract it.\n"
+        "\n"
+        "We believe in self-sovereign infrastructure,\n"
+        "transparency as truth,\n"
+        "and collaboration as strength.\n"
+        "\n"
+        "**We are the builders of the commons.**\n"
+        "The people who refuse to be spectators.\n"
+        "The dreamers who turn frustration into invention.\n"
+        "The communities who turn ideas into action.\n"
+        "\n"
+        "**Because the future we live in depends on the governance we achieve today.**\n"
+        "**#WeAreNotSpectators**";
 
     // ========= State Variables =========
 

@@ -60,21 +60,32 @@ npx graph deploy --studio we-are-not-spectators
 cd webapp
 npm install
 
-# Create environment configuration
+# For Ethereum Mainnet deployment, use the mainnet template:
+cp .env.mainnet .env
+
+# Or for Base deployment:
+cp .env.base .env
+
+# Or create custom configuration:
 cat > .env << 'EOF'
-VITE_CHAIN_ID=8453  # Base=8453, Arbitrum=42161, Optimism=10, Polygon=137, Ethereum=1, Sepolia=11155111
+VITE_CHAIN_ID=1  # Ethereum Mainnet=1, Base=8453, Arbitrum=42161, Optimism=10, Polygon=137, Sepolia=11155111
 VITE_CONTRACT_ADDRESS=0x...  # Your deployed contract
 VITE_SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/.../...  # Optional
-VITE_BLOCK_EXPLORER_URL=https://basescan.org  # Network block explorer
+VITE_BLOCK_EXPLORER_URL=https://etherscan.io  # Network block explorer
 EOF
 ```
 
+**Pre-configured Network Templates:**
+- `.env.mainnet` - Ethereum Mainnet (recommended for production)
+- `.env.base` - Base Network
+- `.env.example` - General template
+
 **Supported Networks:**
-- Base (8453) - 4 RPC endpoints with automatic failover
+- Ethereum Mainnet (1) - 7 RPC endpoints with automatic failover
+- Base (8453) - 7 RPC endpoints with automatic failover
 - Arbitrum (42161)
 - Optimism (10)
 - Polygon (137)
-- Ethereum Mainnet (1)
 - Sepolia Testnet (11155111)
 
 ### 4. Build and Deploy Webapp
@@ -156,7 +167,8 @@ query {
 - **ethers.js v6** - Blockchain interactions
 - **Vite** - Fast builds and dev server
 - **Tailwind CSS** - Styling
-- **Multi-RPC Failover** - 99.9%+ uptime on Base network
+- **Multi-RPC Failover** - 99.9%+ uptime (7 endpoints for Ethereum & Base)
+- **localStorage Caching** - Reduced RPC calls with intelligent caching
 
 ## License
 
