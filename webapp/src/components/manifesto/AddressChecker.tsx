@@ -99,9 +99,13 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
 
   return (
     <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-      <h3 className="text-xl font-medium text-gray-900 mb-6 flex items-center gap-2" style={{ lineHeight: '1.1em' }}>
-        <span>🔍</span> Check Address Status
+      <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+        🔍 Check Address Status
       </h3>
+
+      <p className="text-center text-gray-800 mb-8 text-base font-normal" style={{ lineHeight: '1.5em' }}>
+        Verify if an address or ENS name has signed the manifesto.
+      </p>
 
       <div className="space-y-5">
         {/* Input */}

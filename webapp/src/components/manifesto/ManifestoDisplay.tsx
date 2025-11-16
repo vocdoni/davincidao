@@ -13,16 +13,38 @@ function parseManifestoText(text: string) {
   lines.forEach((line, index) => {
     // Handle headers (lines starting with #)
     if (line.startsWith('# ')) {
+      const title = line.replace('# ', '')
       elements.push(
-        <h3 key={index} className="text-3xl font-medium mt-8 mb-4 text-center" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
-          {line.replace('# ', '')}
-        </h3>
+        <h1
+          key={index}
+          className="text-center mb-10 mt-2"
+          style={{
+            fontFamily: "'EB Garamond', serif",
+            fontSize: 'clamp(1.25rem, 3.5vw, 2rem)',
+            fontWeight: 800,
+            color: '#2a1f0f',
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            lineHeight: '1.3em',
+            textShadow: '1px 1px 2px rgba(0,0,0,0.08)',
+            wordWrap: 'break-word',
+            hyphens: 'auto'
+          }}
+        >
+          {title}
+        </h1>
       )
     }
     // Handle subheaders (lines starting with ##)
     else if (line.startsWith('## ')) {
       elements.push(
-        <h4 key={index} className="text-2xl font-medium mt-6 mb-3 text-center" style={{ lineHeight: '1.1em', color: '#4a3f2f' }}>
+        <h4 key={index} className="text-2xl mt-8 mb-4 text-left" style={{
+          fontFamily: "'EB Garamond', serif",
+          fontWeight: 600,
+          lineHeight: '1.2em',
+          color: '#3a2f1f',
+          letterSpacing: '0.01em'
+        }}>
           {line.replace('## ', '')}
         </h4>
       )
@@ -35,10 +57,15 @@ function parseManifestoText(text: string) {
     else {
       const parts = line.split(/(\*\*.*?\*\*)/)
       elements.push(
-        <p key={index} className="mb-1.5 text-center font-normal text-base" style={{ lineHeight: '1.1em', color: '#3a2f1f' }}>
+        <p key={index} className="mb-2 text-left text-lg" style={{
+          fontFamily: "'EB Garamond', serif",
+          lineHeight: '1.5em',
+          color: '#3a2f1f',
+          fontWeight: 400
+        }}>
           {parts.map((part, i) => {
             if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={i} className="font-semibold" style={{ color: '#2a1f0f' }}>{part.slice(2, -2)}</strong>
+              return <strong key={i} style={{ fontWeight: 600, color: '#2a1f0f' }}>{part.slice(2, -2)}</strong>
             }
             return <span key={i}>{part}</span>
           })}
@@ -53,7 +80,7 @@ function parseManifestoText(text: string) {
 export function ManifestoDisplay({ metadata, loading }: ManifestoDisplayProps) {
   if (loading) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-10 md:p-14 shadow-2xl">
+      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-6 md:p-10 shadow-2xl">
         <div className="animate-pulse max-w-4xl mx-auto">
           <div className="h-10 bg-[#c4a57b]/30 rounded w-3/4 mx-auto mb-4"></div>
           <div className="h-4 bg-[#c4a57b]/30 rounded w-1/2 mx-auto mb-8"></div>
@@ -69,14 +96,14 @@ export function ManifestoDisplay({ metadata, loading }: ManifestoDisplayProps) {
 
   if (!metadata) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-10 md:p-14 shadow-2xl">
+      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-6 md:p-10 shadow-2xl">
         <p className="text-center font-light" style={{ color: '#3a2f1f' }}>Loading manifesto...</p>
       </div>
     )
   }
 
   return (
-    <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-10 md:p-14 shadow-2xl"
+    <div className="relative bg-gradient-to-br from-[#f5e6d3]/90 via-[#f0ddc0]/85 to-[#e8d4b8]/90 rounded-2xl border-2 border-[#c4a57b] p-6 md:p-10 shadow-2xl"
          style={{
            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.06), 0 10px 30px rgba(0,0,0,0.15)',
            backgroundImage: `
@@ -110,8 +137,13 @@ export function ManifestoDisplay({ metadata, loading }: ManifestoDisplayProps) {
       </div>
 
       {/* Decorative footer with old manuscript style */}
-      <div className="mt-10 pt-8 border-t-2 border-[#c4a57b] text-center relative z-10">
-        <div className="text-[#8b7355] text-sm font-serif tracking-widest">✦ ✦ ✦</div>
+      <div className="mt-12 pt-8 border-t-2 text-center relative z-10" style={{ borderColor: '#8b7355' }}>
+        <div style={{
+          fontFamily: "'EB Garamond', serif",
+          color: '#8b7355',
+          fontSize: '1.25rem',
+          letterSpacing: '0.5em'
+        }}>✦ ✦ ✦</div>
       </div>
     </div>
   )

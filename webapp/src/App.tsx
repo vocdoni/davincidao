@@ -613,40 +613,18 @@ function App() {
               <span className="text-sm font-medium text-gray-900 uppercase tracking-wider">DAVINCI</span>
             </a>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  const signCard = document.getElementById('sign-card')
-                  if (signCard) {
-                    signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }
-                }}
-                className="px-6 py-2.5 bg-white/60 text-gray-900 rounded-full hover:bg-white/80 transition-colors text-sm font-medium border border-[#D4C4AC]"
-              >
-                Sign the Manifesto
-              </button>
-
-              <button
-                onClick={connectWallet}
-                disabled={loadingContract}
-                className="px-6 py-2.5 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {loadingContract ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Connecting...
-                  </span>
-                ) : account ? (
-                  `${account.slice(0, 6)}...${account.slice(-4)}`
-                ) : (
-                  'Connect Wallet'
-                )}
-              </button>
-            </div>
+            {/* Action Button */}
+            <button
+              onClick={() => {
+                const signCard = document.getElementById('sign-card')
+                if (signCard) {
+                  signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+              }}
+              className="px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
+            >
+              🪶 Sign the Manifesto
+            </button>
           </div>
         </div>
       </header>
@@ -655,7 +633,7 @@ function App() {
       <main className="max-w-[1008px] mx-auto px-6 py-12 relative" style={{
         backgroundImage: 'url(/background.avif)',
         backgroundSize: 'contain',
-        backgroundPosition: 'center 80px',
+        backgroundPosition: 'center 150px',
         backgroundRepeat: 'no-repeat',
         minHeight: 'calc(100vh - 200px)'
       }}>
@@ -671,6 +649,14 @@ function App() {
 
             {/* Stats & Sign Button */}
             <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
+              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+                🪶 Sign the Manifesto
+              </h3>
+
+              <p className="text-center text-gray-800 mb-8 text-base font-normal" style={{ lineHeight: '1.5em' }}>
+                If you agree with these principles and refuse to be a spectator, add your signature and join us!
+              </p>
+
               <div className="text-center mb-8">
                 <p className="text-6xl font-medium text-gray-900 mb-3" style={{ lineHeight: '1em' }}>
                   {totalPledges.toLocaleString()}
@@ -683,6 +669,7 @@ function App() {
               <SignatureButton
                 pledgeStatus={pledgeStatus}
                 onSign={handleSign}
+                onConnect={connectWallet}
                 loading={pledging}
                 connected={!!account}
               />
@@ -693,13 +680,13 @@ function App() {
 
             {/* Census Info */}
             <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-              <h3 className="text-xl font-medium text-gray-900 mb-6 flex items-center gap-2" style={{ lineHeight: '1.1em' }}>
-                <span>🌳</span> Cryptographic Census
+              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+                🌳 Cryptographic Census
               </h3>
 
               {/* Explanation */}
-              <div className="mb-6">
-                <p className="text-sm text-gray-800 font-normal" style={{ lineHeight: '1.1em' }}>
+              <div className="mb-8">
+                <p className="text-center text-gray-800 font-normal text-base" style={{ lineHeight: '1.5em' }}>
                   Each new address is added to an on-chain <strong className="font-medium">zk-friendly Merkle tree</strong>, creating a
                   cryptographic structure that groups all signers. This census can be used by voting applications
                   as a <strong className="font-medium">trustless authentication mechanism</strong>, allowing manifesto
@@ -707,16 +694,39 @@ function App() {
                 </p>
               </div>
 
-              {/* Stats */}
-              <div className="space-y-4 text-sm">
-                <div>
-                  <p className="text-gray-700 mb-2 font-medium">Current Root Hash</p>
-                  <p className="font-mono text-xs text-gray-800 break-all bg-white/60 p-3 rounded-lg border border-[#D4C4AC]">
-                    {censusRoot !== '0' ? `0x${BigInt(censusRoot).toString(16).padStart(64, '0')}` : 'Not yet initialized'}
+              {/* Census Details */}
+              <div className="space-y-5">
+                {/* Network */}
+                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-700">Network</span>
+                  </div>
+                  <p className="text-base text-gray-900 font-medium">
+                    {(() => {
+                      const networks: Record<number, string> = {
+                        1: 'Ethereum Mainnet',
+                        11155111: 'Sepolia Testnet',
+                        8453: 'Base',
+                        42161: 'Arbitrum One',
+                        10: 'Optimism',
+                        137: 'Polygon'
+                      }
+                      return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
+                    })()}
                   </p>
                 </div>
-                <div>
-                  <p className="text-gray-700 mb-2 font-medium">Contract Address</p>
+
+                {/* Contract Address */}
+                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-700">Contract Address</span>
+                  </div>
                   <a
                     href={(() => {
                       const explorers: Record<number, string> = {
@@ -732,25 +742,27 @@ function App() {
                     })()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-xs text-blue-600 hover:text-blue-800 underline break-all block"
+                    className="font-mono text-xs text-gray-900 hover:text-gray-700 break-all block transition-colors group"
                   >
-                    {CONTRACT_ADDRESS}
+                    <span className="group-hover:underline">{CONTRACT_ADDRESS}</span>
+                    <svg className="w-3 h-3 inline-block ml-1 opacity-60 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
                   </a>
                 </div>
-                <div>
-                  <p className="text-gray-700 font-medium">Network</p>
-                  <p className="text-gray-800">
-                    {(() => {
-                      const networks: Record<number, string> = {
-                        1: 'Ethereum Mainnet',
-                        11155111: 'Sepolia Testnet',
-                        8453: 'Base',
-                        42161: 'Arbitrum One',
-                        10: 'Optimism',
-                        137: 'Polygon'
-                      }
-                      return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
-                    })()}
+
+                {/* Root Hash */}
+                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-700">Current Root Hash</span>
+                  </div>
+                  <p className="font-mono text-xs text-gray-900 break-all leading-relaxed">
+                    {censusRoot !== '0' ? `0x${BigInt(censusRoot).toString(16).padStart(64, '0')}` : (
+                      <span className="text-gray-600 italic">Not yet initialized</span>
+                    )}
                   </p>
                 </div>
               </div>

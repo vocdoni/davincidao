@@ -3,11 +3,12 @@ import { PledgeStatus } from '~/types'
 interface SignatureButtonProps {
   pledgeStatus: PledgeStatus | null
   onSign: () => void
+  onConnect?: () => void
   loading?: boolean
   connected: boolean
 }
 
-export function SignatureButton({ pledgeStatus, onSign, loading, connected }: SignatureButtonProps) {
+export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, connected }: SignatureButtonProps) {
   if (pledgeStatus?.hasPledged) {
     return (
       <div className="bg-white/60 border border-green-700/30 rounded-xl p-6 text-center">
@@ -28,6 +29,19 @@ export function SignatureButton({ pledgeStatus, onSign, loading, connected }: Si
     )
   }
 
+  // Not connected - show connect button
+  if (!connected && onConnect) {
+    return (
+      <button
+        onClick={onConnect}
+        className="w-full py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors text-base"
+      >
+        Connect Wallet to Sign
+      </button>
+    )
+  }
+
+  // Connected - show sign button
   return (
     <button
       onClick={onSign}
@@ -42,10 +56,8 @@ export function SignatureButton({ pledgeStatus, onSign, loading, connected }: Si
           </svg>
           Signing...
         </span>
-      ) : connected ? (
-        'Sign the Manifesto'
       ) : (
-        'Connect Wallet to Sign'
+        'Sign the Manifesto'
       )}
     </button>
   )
