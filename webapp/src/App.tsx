@@ -22,6 +22,16 @@ function App() {
   const [loadingContract, setLoadingContract] = useState(false)
   const [pledging, setPledging] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check localStorage for saved preference
+    const saved = localStorage.getItem('darkMode')
+    return saved ? JSON.parse(saved) : false
+  })
+
+  // Save dark mode preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(darkMode))
+  }, [darkMode])
 
   // Initialize subgraph on mount (optional, only for tree index data)
   useEffect(() => {
@@ -627,52 +637,68 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#dbc2a5]">
+    <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-[#1a1410]' : 'bg-[#dbc2a5]'}`}>
       <Toaster position="top-right" />
 
       {/* Header */}
-      <header className="bg-[#dbc2a5] border-b border-[#D4C4AC]">
+      <header className={`border-b transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
             {/* Logo and Title */}
             <a href="https://davinci.vote" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <img src="/davinci-logo.svg" alt="DAVINCI" className="w-8 h-8" />
-              <span className="text-sm font-medium text-gray-900 uppercase tracking-wider">DAVINCI</span>
+              <span className={`text-sm font-medium uppercase tracking-wider ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-900'}`}>DAVINCI</span>
             </a>
 
-            {/* Action Button */}
-            <button
-              onClick={() => {
-                const signCard = document.getElementById('sign-card')
-                if (signCard) {
-                  signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }
-              }}
-              className="px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
-            >
-              🪶 Sign the Manifesto
-            </button>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-full transition-colors ${darkMode ? 'hover:bg-[#3a3530]' : 'hover:bg-[#D4C4AC]/30'}`}
+                aria-label="Toggle dark mode"
+              >
+                {darkMode ? (
+                  <svg className="w-5 h-5 text-[#dbc2a5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Sign Button */}
+              <button
+                onClick={() => {
+                  const signCard = document.getElementById('sign-card')
+                  if (signCard) {
+                    signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                }}
+                className="px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
+              >
+                🪶 Sign the Manifesto
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content with Background */}
-      <main className="max-w-[1008px] mx-auto px-6 py-12 relative" style={{
-        backgroundImage: 'url(/background.avif)',
-        backgroundSize: 'contain',
-        backgroundPosition: 'center 150px',
-        backgroundRepeat: 'no-repeat',
+      {/* Main Content */}
+      <main className="max-w-[1008px] mx-auto py-12 relative" style={{
         minHeight: 'calc(100vh - 200px)'
       }}>
         <div className="space-y-10">
 
-          {/* Manifesto Text */}
-          <div>
-            <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} />
+          {/* Manifesto Text - scrollable container */}
+          <div className="overflow-x-auto">
+            <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} darkMode={darkMode} />
           </div>
 
           {/* Cards below manifesto */}
-          <div className="space-y-8">
+          <div className="space-y-8 px-6">
 
             {/* Stats & Sign Button */}
             <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
@@ -799,14 +825,14 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-[#dbc2a5] border-t border-[#D4C4AC] mt-16 py-12">
+      <footer className={`mt-16 py-12 border-t transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
         <div className="max-w-[1008px] mx-auto px-6">
-          <div className="text-center text-gray-800 space-y-3">
+          <div className={`text-center space-y-3 ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-800'}`}>
             <p className="text-base italic font-normal" style={{ lineHeight: '1.1em' }}>
-              Made with love by <a href="https://vocdoni.io" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900">Vocdoni</a>
+              Made with love by <a href="https://vocdoni.io" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#f5e6d3]' : 'hover:text-gray-900'}`}>Vocdoni</a>
             </p>
-            <p className="text-xs text-gray-600 font-normal" style={{ lineHeight: '1.1em' }}>
-              <a href="https://github.com/vocdoni/davinci-onchain-census/tree/manifesto" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-800">Source Code</a>
+            <p className={`text-xs font-normal ${darkMode ? 'text-[#c4a57b]' : 'text-gray-600'}`} style={{ lineHeight: '1.1em' }}>
+              <a href="https://github.com/vocdoni/davinci-onchain-census/tree/manifesto" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#dbc2a5]' : 'hover:text-gray-800'}`}>Source Code</a>
               {' · '}
               License AGPLv3
             </p>
