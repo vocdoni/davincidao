@@ -138,9 +138,18 @@ export class ManifestoContract {
 
     console.log('Pledge transaction submitted:', tx.hash)
 
-    // Wait for confirmation
-    const receipt = await tx.wait()
-    console.log('Pledge transaction confirmed:', receipt?.hash || tx.hash)
+    // Wait for confirmation (with error handling for null receipt)
+    try {
+      const receipt = await tx.wait()
+      if (receipt) {
+        console.log('Pledge transaction confirmed in block:', receipt.blockNumber)
+      } else {
+        console.log('Transaction submitted but receipt is null (tx may still be pending):', tx.hash)
+      }
+    } catch (error) {
+      // If wait() fails but transaction was submitted, still return the hash
+      console.warn('Error waiting for confirmation, but transaction was submitted:', error)
+    }
 
     return tx.hash
   }
