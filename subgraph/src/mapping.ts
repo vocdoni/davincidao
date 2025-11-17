@@ -1,9 +1,18 @@
-import { BigInt } from "@graphprotocol/graph-ts";
+import { BigInt, Bytes } from "@graphprotocol/graph-ts";
 import {
   Pledged,
   CensusRootUpdated,
+  IdentityVerified,
 } from "../generated/ManifestoCensus/ManifestoCensus";
-import { Signer, CensusRoot, GlobalStats, PledgeEvent, Account, WeightChangeEvent } from "../generated/schema";
+import {
+  Signer,
+  CensusRoot,
+  GlobalStats,
+  PledgeEvent,
+  Account,
+  WeightChangeEvent,
+  IdentityVerificationEvent,
+} from "../generated/schema";
 
 const GLOBAL_STATS_ID = "global";
 
@@ -21,6 +30,53 @@ function loadOrCreateGlobalStats(): GlobalStats {
     stats.nextTreeIndex = BigInt.fromI32(0);
   }
   return stats;
+}
+
+function attestationBytesToBigInt(attestationId: Bytes): BigInt {
+  return BigInt.fromUnsignedBytes(attestationId);
+}
+
+function documentLabelFromAttestation(attestationId: BigInt): string {
+  const id = attestationId.toI32();
+  if (id == 1) {
+    return "Passport";
+  }
+  if (id == 2) {
+    return "National ID card";
+  }
+  if (id == 3) {
+    return "Aadhaar card";
+  }
+  return "Unknown document";
+}
+
+/**
+ * Handle IdentityVerified event to capture document type + nullifier
+ * Event: IdentityVerified(address indexed signer, uint256 nullifier, bytes32 attestationId)
+ */
+export function handleIdentityVerified(event: IdentityVerified): void {
+  const signerAddress = event.params.signer;
+  const addressLowercase = signerAddress.toHexString().toLowerCase();
+  const attestationBigInt = attestationBytesToBigInt(event.params.attestationId);
+  const verificationId = event.transaction.hash.toHexString() + "-" + addressLowercase;
+
+  let verification = new IdentityVerificationEvent(verificationId);
+  verification.signer = addressLowercase;
+  verification.documentTypeId = attestationBigInt;
+  verification.documentTypeLabel = documentLabelFromAttestation(attestationBigInt);
+  verification.nullifier = event.params.nullifier;
+  verification.blockNumber = event.block.number;
+  verification.timestamp = event.block.timestamp;
+  verification.transactionHash = event.transaction.hash;
+  verification.save();
+
+  let signer = Signer.load(addressLowercase);
+  if (signer != null) {
+    signer.documentTypeId = attestationBigInt;
+    signer.documentTypeLabel = verification.documentTypeLabel;
+    signer.nullifier = event.params.nullifier;
+    signer.save();
+  }
 }
 
 /**
@@ -77,9 +133,17 @@ export function handlePledged(event: Pledged): void {
     // Increment counters
     stats.totalPledges = stats.totalPledges.plus(BigInt.fromI32(1));
     stats.nextTreeIndex = stats.nextTreeIndex.plus(BigInt.fromI32(1));
-
-    signer.save();
   }
+
+  const signerEntity = signer as Signer;
+  const verificationId = event.transaction.hash.toHexString() + "-" + addressLowercase;
+  const verification = IdentityVerificationEvent.load(verificationId);
+  if (verification != null) {
+    signerEntity.documentTypeId = verification.documentTypeId;
+    signerEntity.documentTypeLabel = verification.documentTypeLabel;
+    signerEntity.nullifier = verification.nullifier;
+  }
+  signerEntity.save();
 
   // Update global stats
   stats.lastPledgeAt = timestamp;
@@ -94,6 +158,9 @@ export function handlePledged(event: Pledged): void {
   pledgeEvent.blockNumber = event.block.number;
   pledgeEvent.transactionHash = event.transaction.hash;
   pledgeEvent.logIndex = event.logIndex;
+  pledgeEvent.documentTypeId = signerEntity.documentTypeId;
+  pledgeEvent.documentTypeLabel = signerEntity.documentTypeLabel;
+  pledgeEvent.nullifier = signerEntity.nullifier;
   pledgeEvent.save();
 }
 

@@ -18,6 +18,7 @@ const MANIFESTO_ABI = [
   'function getRootBlockNumber(uint256) view returns (uint256)',
   'function computeLeaf(address) pure returns (uint256)',
   'function getVerificationParameters() view returns (uint256,bool,bool,string[],bytes3,bytes32[])',
+  'function getAllowedAttestationIds() view returns (bytes32[])',
   'function scopeLabel() view returns (string)',
 
   // Write functions
@@ -189,9 +190,9 @@ export class ManifestoContract {
       minAgeEnabled,
       ofacEnabled,
       forbiddenCountries,
-      requiredNationality,
-      attestationIds
+      requiredNationality
     ] = await this.contract.getVerificationParameters()
+    const attestationIds = await this.contract.getAllowedAttestationIds()
 
     return {
       minAge: Number(minAge),

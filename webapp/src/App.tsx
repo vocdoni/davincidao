@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BrowserProvider, JsonRpcProvider, Wallet, getAddress, toUtf8String } from 'ethers'
+import { JsonRpcProvider, Wallet, toUtf8String } from 'ethers'
 import { toast, Toaster } from 'sonner'
 import { ManifestoContract } from '~/lib/manifesto-contract'
 import { initSubgraphClient, getSigner } from '~/lib/subgraph-client'
@@ -10,7 +10,6 @@ import { buildSelfApp, getUniversalLink, type EndpointType, type SelfApp } from 
 
 const CONTRACT_ADDRESS = (import.meta.env.VITE_CONTRACT_ADDRESS || '').trim()
 const RPC_URL = (import.meta.env.VITE_RPC_URL || 'https://forno.celo.org').trim()
-const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 42220)
 const SUBGRAPH_ENDPOINT = (import.meta.env.VITE_SUBGRAPH_ENDPOINT || '').trim()
 const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://celoscan.io'
 
@@ -24,6 +23,35 @@ const debugLog = (...args: unknown[]) => {
   if (DEBUG_LOGS) {
     console.debug('[ManifestoApp]', ...args)
   }
+}
+
+const ATTESTATION_LABELS: Record<number, string> = {
+  1: 'Passport',
+  2: 'National ID card',
+  3: 'Aadhaar card'
+}
+
+const getAllowedDocumentLabels = (attestationIds: string[]): string[] => {
+  const seen = new Set<string>()
+  const labels: string[] = []
+
+  for (const id of attestationIds) {
+    try {
+      const numeric = Number(BigInt(id))
+      const label = ATTESTATION_LABELS[numeric] || `Document #${numeric}`
+      if (!seen.has(label)) {
+        seen.add(label)
+        labels.push(label)
+      }
+    } catch {
+      if (!seen.has(id)) {
+        seen.add(id)
+        labels.push(id)
+      }
+    }
+  }
+
+  return labels
 }
 
 const RPC_FALLBACKS = Array.from(new Set([
@@ -51,14 +79,12 @@ type VerificationPolicyState = {
   attestationIds: string[]
 }
 
-const STATUS_COPY: Record<string, string> = {
-  idle: 'Select an address to begin.',
-  preparing: 'Preparing a Self QR code for your address…',
-  awaiting: 'Open the Self app and scan the QR code (or tap the button below).',
-  verifying: 'Proof received! Waiting for the Self relayer to submit your pledge on-chain…',
-  polling: 'Still waiting for the pledge transaction. This can take a few seconds.',
-  success: 'All set! Your signature is on-chain.',
-  error: 'Something looks off. Please double-check and try again.'
+type RequirementSection = {
+  key: string
+  title: string
+  description?: string
+  bullets?: string[]
+  chips?: string[]
 }
 
 function formatDate(timestamp: number) {
@@ -88,9 +114,69 @@ export default function App() {
     const saved = localStorage.getItem('manifesto-dark-mode')
     return saved ? JSON.parse(saved) : false
   })
-  const [account, setAccount] = useState<string | null>(null)
   const [verificationPolicy, setVerificationPolicy] = useState<VerificationPolicyState | null>(null)
   const [scopeSeed, setScopeSeed] = useState('')
+  const allowedDocumentLabels = useMemo(
+    () => (verificationPolicy ? getAllowedDocumentLabels(verificationPolicy.attestationIds) : []),
+    [verificationPolicy]
+  )
+  const requirementSections = useMemo<RequirementSection[]>(() => {
+    if (!verificationPolicy) {
+      return [
+        {
+          key: 'automatic',
+          title: 'Automated checks',
+          bullets: ['Self verifies every requirement privately on your device.']
+        }
+      ]
+    }
+
+    const sections: RequirementSection[] = []
+    const documentSection: RequirementSection = {
+      key: 'documents',
+      title: 'Documents',
+      description: allowedDocumentLabels.length
+        ? 'Scan any of the verified IDs shown below.'
+        : 'Self will guide you to the right document to scan.'
+    }
+    if (allowedDocumentLabels.length) {
+      documentSection.chips = allowedDocumentLabels
+    } else {
+      documentSection.bullets = ['Compatible documents are selected dynamically.']
+    }
+    sections.push(documentSection)
+
+    const eligibilityBullets: string[] = []
+    if (verificationPolicy.minAgeEnabled && verificationPolicy.minAge > 0) {
+      eligibilityBullets.push(`Minimum age: ${verificationPolicy.minAge}+`)
+    } else {
+      eligibilityBullets.push('No minimum age requirement')
+    }
+
+    if (verificationPolicy.requiredNationality) {
+      eligibilityBullets.push(`Documents issued by ${verificationPolicy.requiredNationality} only`)
+    } else if (verificationPolicy.excludedCountries.length) {
+      eligibilityBullets.push(`Excluded countries: ${verificationPolicy.excludedCountries.join(', ')}`)
+    } else {
+      eligibilityBullets.push('Open to all supported countries')
+    }
+
+    sections.push({
+      key: 'eligibility',
+      title: 'Eligibility',
+      bullets: eligibilityBullets
+    })
+
+    sections.push({
+      key: 'compliance',
+      title: 'Compliance',
+      bullets: verificationPolicy.ofacEnabled
+        ? ['OFAC sanctions screening is enforced.']
+        : ['No sanctions screening required.']
+    })
+
+    return sections
+  }, [verificationPolicy, allowedDocumentLabels])
 
   const rpcProviders = useMemo(
     () => RPC_FALLBACKS.map((rpc) => ({ rpc, provider: new JsonRpcProvider(rpc) })),
@@ -371,45 +457,6 @@ export default function App() {
     }
   }
 
-  const handleConnectWallet = async () => {
-    try {
-      if (!window.ethereum) {
-        toast.error('Please install a wallet (e.g., MetaMask) to continue.')
-        return
-      }
-
-      const provider = new BrowserProvider(window.ethereum)
-      const accounts = (await window.ethereum.request?.({ method: 'eth_requestAccounts' })) as string[]
-      if (!accounts || accounts.length === 0) {
-        return
-      }
-
-      const desiredChain = `0x${CHAIN_ID.toString(16)}`
-      const currentChain = (await window.ethereum.request?.({ method: 'eth_chainId' })) as string
-      if (currentChain && currentChain.toLowerCase() !== desiredChain.toLowerCase()) {
-        try {
-          await window.ethereum.request?.({ method: 'wallet_switchEthereumChain', params: [{ chainId: desiredChain }] })
-        } catch (error) {
-          toast.error('Please switch your wallet to the Celo network (chain 42220).')
-          console.error('Failed to switch network:', error)
-          return
-        }
-      }
-
-      const signer = await provider.getSigner()
-      const walletAddress = await signer.getAddress()
-      setAccount(walletAddress)
-      setSelectedAddress(getAddress(walletAddress))
-      setSelectedLabel('Connected wallet')
-      debugLog('Wallet connected', { walletAddress, chainId: desiredChain })
-      toast.success('Wallet connected successfully.')
-    } catch (error) {
-      console.error('Wallet connection failed:', error)
-      toast.error('Unable to connect wallet.')
-    }
-  }
-
-
   const handleSelfSuccess = async () => {
     if (!selectedAddress) return
     setSelfStatus('verifying')
@@ -467,27 +514,6 @@ export default function App() {
   }
 
   const selectedAlreadySigned = selectedStatus?.hasPledged
-  const requirementItems: string[] = []
-
-  if (verificationPolicy) {
-    if (verificationPolicy.minAgeEnabled && verificationPolicy.minAge > 0) {
-      requirementItems.push(`Be at least ${verificationPolicy.minAge} years old.`)
-    }
-
-    if (verificationPolicy.requiredNationality) {
-      requirementItems.push(`Use a passport issued by ${verificationPolicy.requiredNationality}.`)
-    } else if (verificationPolicy.excludedCountries.length) {
-      requirementItems.push(`The following countries are excluded: ${verificationPolicy.excludedCountries.join(', ')}.`)
-    } else {
-      requirementItems.push('Passports from any supported country are welcome.')
-    }
-
-    if (verificationPolicy.ofacEnabled) {
-      requirementItems.push('Individuals on the OFAC sanctions list cannot participate.')
-    }
-  } else {
-    requirementItems.push('Self will verify your eligibility directly on your device.')
-  }
 
   return (
     <div className={darkMode ? 'bg-[#0c0a09] text-white min-h-screen' : 'bg-[#f8f1e6] text-gray-900 min-h-screen'}>
@@ -516,12 +542,33 @@ export default function App() {
 
           <div className="space-y-6">
             <section className="bg-white dark:bg-[#151515] rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-lg">
-              <div className="mb-4">
-                <p className="text-sm uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Verify & Sign</p>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pick your address, then scan with Self.</h2>
-              </div>
-
               <div className="space-y-4">
+
+                {!selectedAlreadySigned && selfApp && selectedAddress && (
+                  <div className="rounded-2xl border border-gray-200 dark:border-white/10 p-5 bg-white dark:bg-[#111111] flex flex-col items-center text-center gap-4">
+                    <SelfQR selfApp={selfApp} onSuccess={handleSelfSuccess} onError={handleSelfError} darkMode={darkMode} />
+                    <button
+                      onClick={() => window.open(universalLink, '_blank')}
+                      className="text-xs px-4 py-2 rounded-full border border-gray-300 dark:border-white/20 text-gray-700 dark:text-gray-200"
+                    >
+                      Open Self on this device
+                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 dark:text-gray-300">
+                      <a href={SELF_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="underline">
+                        Download Self
+                      </a>
+                      <span className="hidden sm:inline">•</span>
+                      <a href={SELF_DOCS_URL} target="_blank" rel="noreferrer" className="underline">
+                        Official docs
+                      </a>
+                    </div>
+                    {selfError && (
+                      <div className="text-sm">
+                        <p className="text-xs text-red-600 dark:text-red-400">{selfError}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {generatedWallet && (
                   <div className="rounded-2xl border border-blue-200 dark:border-blue-500/40 bg-blue-50 p-4 text-sm space-y-4 dark:bg-[#0d1b2a]">
@@ -548,11 +595,11 @@ export default function App() {
                         </>
                       ) : (
                         <p className="text-xs text-blue-900/70 dark:text-blue-200 mt-1">
-                          No address selected yet. Choose one of the options below to continue.
+                          No address selected yet. Select the auto-generated wallet to continue.
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div>
                       <button
                         onClick={() => {
                           setSelectedAddress(generatedWallet.address)
@@ -564,58 +611,54 @@ export default function App() {
                       >
                         Use auto wallet
                       </button>
-                      <button
-                        onClick={handleConnectWallet}
-                        className="px-3 py-1.5 rounded-full border border-blue-300 dark:border-blue-400 text-xs text-blue-900 dark:text-blue-100"
-                      >
-                        {account ? 'Refresh connected wallet' : 'Use connected wallet'}
-                      </button>
                     </div>
                   </div>
                 )}
 
                 {!selectedAlreadySigned && selectedAddress && (
-                  <div className="rounded-2xl border border-purple-200 dark:border-purple-500/40 bg-purple-50 p-4 text-sm space-y-2 dark:bg-[#1b1025]">
-                    <p className="font-semibold text-purple-900 dark:text-purple-100">Requirements verified by Self</p>
-                    <ul className="list-disc pl-5 space-y-1 text-purple-900/80 dark:text-purple-100/80">
-                      {requirementItems.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-purple-900/70 dark:text-purple-200">
-                      Self checks these conditions on your phone so nothing sensitive ever leaves your device.
-                    </p>
-                  </div>
-                )}
-
-                {!selectedAlreadySigned && selfApp && selectedAddress && (
-                  <div className="rounded-2xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-[#111111] grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                    <div className="flex flex-col items-center gap-3">
-                      <SelfQR selfApp={selfApp} onSuccess={handleSelfSuccess} onError={handleSelfError} darkMode={darkMode} />
-                      <button
-                        onClick={() => window.open(universalLink, '_blank')}
-                        className="text-xs px-3 py-2 rounded-full border border-gray-300 dark:border-white/20 text-gray-700 dark:text-gray-200"
-                      >
-                        Open Self on this device
-                      </button>
-                      <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 dark:text-gray-300">
-                        <a href={SELF_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="underline">
-                          Download Self
-                        </a>
-                        <span className="hidden sm:inline">•</span>
-                        <a href={SELF_DOCS_URL} target="_blank" rel="noreferrer" className="underline">
-                          Official docs
-                        </a>
-                      </div>
+                  <div className="rounded-2xl border border-purple-200 dark:border-purple-500/40 bg-purple-50 p-4 text-sm space-y-4 dark:bg-[#1b1025]">
+                    <div>
+                      <p className="font-semibold text-purple-900 dark:text-purple-100">Requirements verified by Self</p>
+                      <p className="text-xs text-purple-900/70 dark:text-purple-200">
+                        These checks run locally on your phone so no raw data ever touches Celo.
+                      </p>
                     </div>
-                    <div className="text-sm space-y-3">
-                      <p className="font-medium text-gray-900 dark:text-white">{STATUS_COPY[selfStatus]}</p>
-                      {selfError && <p className="text-xs text-red-600 dark:text-red-400">{selfError}</p>}
-                      {!SELF_DEEPLINK_CALLBACK && (
-                        <p className="text-xs text-gray-600 dark:text-gray-300">
-                          Tip: After verifying, Self will bring you back automatically.
-                        </p>
-                      )}
+                    <div className="space-y-3">
+                      {requirementSections.map((section) => (
+                        <div
+                          key={section.key}
+                          className="rounded-xl border border-purple-200/70 dark:border-purple-500/30 bg-white/80 dark:bg-white/5 p-4 space-y-2"
+                        >
+                          <p className="text-xs uppercase tracking-[0.25em] text-purple-600 dark:text-purple-200">
+                            {section.title}
+                          </p>
+                          {section.description && (
+                            <p className="text-sm text-purple-900/80 dark:text-purple-100/80">{section.description}</p>
+                          )}
+                          {section.chips && (
+                            <div className="flex flex-wrap gap-2">
+                              {section.chips.map((chip) => (
+                                <span
+                                  key={chip}
+                                  className="px-3 py-1 rounded-full bg-purple-600/10 text-xs font-semibold text-purple-800 dark:text-purple-100 border border-purple-500/20"
+                                >
+                                  {chip}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {section.bullets && (
+                            <ul className="space-y-1 text-purple-900/80 dark:text-purple-100/80">
+                              {section.bullets.map((item, index) => (
+                                <li key={index} className="flex items-start gap-2 text-sm">
+                                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-purple-400 dark:bg-purple-300" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -684,38 +727,38 @@ export default function App() {
               </div>
             </section>
 
-            <section className="bg-white dark:bg-[#151515] rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-lg">
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Verification data</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Live Merkle root and contract reference</p>
-                </div>
-                <a
-                  className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 text-xs text-gray-700 dark:text-gray-200"
-                  href={`${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View contract
-                </a>
+            <section className="bg-white dark:bg-[#151515] rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-lg space-y-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Verification data</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Live Merkle root and contract reference</p>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4 space-y-2">
                   <p className="text-xs uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Current Merkle root</p>
-                  <p className="font-mono text-xs break-all text-gray-900 dark:text-white mt-3">{censusRoot}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Used to verify every pledge on-chain</p>
+                  <p className="font-mono text-xs break-all text-gray-900 dark:text-white">{censusRoot}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Used to verify every pledge on-chain.</p>
                 </div>
-                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4">
-                  <p className="text-xs uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Contract address</p>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Contract address</p>
+                    <a
+                      className="px-3 py-1 rounded-full border border-gray-200 dark:border-white/20 text-xs text-gray-700 dark:text-gray-200"
+                      href={`${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View
+                    </a>
+                  </div>
                   <a
-                    className="font-mono text-xs break-all text-blue-700 dark:text-blue-300 underline mt-3 block"
+                    className="font-mono text-xs break-all text-blue-700 dark:text-blue-300 underline block"
                     href={`${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
                     target="_blank"
                     rel="noreferrer"
                   >
                     {CONTRACT_ADDRESS}
                   </a>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Runs on Celo mainnet with Self verification</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Runs on Celo mainnet with Self verification.</p>
                 </div>
               </div>
             </section>

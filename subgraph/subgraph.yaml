@@ -10,9 +10,9 @@ dataSources:
     name: ManifestoCensus
     network: celo
     source:
-      address: "0x80603971AE1097fB9A5c0aEd6f3fcCE5d42EF578"
+      address: "0xa09DEad2Ab357824DfdeE1CF0A895B6b8BB57D81"
       abi: ManifestoCensus
-      startBlock: 51489323
+      startBlock: 51510234
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -24,10 +24,13 @@ dataSources:
         - PledgeEvent
         - Account
         - WeightChangeEvent
+        - IdentityVerificationEvent
       abis:
         - name: ManifestoCensus
           file: ./abis/ManifestoCensus.json
       eventHandlers:
+        - event: IdentityVerified(indexed address,uint256,bytes32)
+          handler: handleIdentityVerified
         - event: Pledged(indexed address,uint256)
           handler: handlePledged
         - event: CensusRootUpdated(indexed uint256,uint256)

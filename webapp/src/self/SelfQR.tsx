@@ -70,25 +70,25 @@ export function SelfQR({
   const qrValue = `${REDIRECT_URL}?sessionId=${selfApp.sessionId}`
 
   return (
-    <div className="w-full">
-      <div className="flex items-center gap-3 mb-3">
+    <div className="w-full flex flex-col items-center">
+      <div className="flex items-center gap-2 mb-3">
         <StatusLED status={proofStep} />
-        <p className="text-sm text-gray-800 dark:text-gray-200">{stepCopy[proofStep]}</p>
+        <p className="text-sm text-gray-800 dark:text-gray-200 text-center">{stepCopy[proofStep]}</p>
       </div>
-      <div className="flex items-center justify-center rounded-2xl bg-white dark:bg-black border border-gray-200 dark:border-white/20 p-4 min-h-[320px]">
+      <div className="flex items-center justify-center rounded-2xl bg-white dark:bg-black border border-gray-200 dark:border-white/20 p-5 min-h-[360px] w-full">
         {showSpinner ? (
-          <BounceLoader color="#31F040" loading size={160} />
+          <BounceLoader color="#31F040" loading size={200} />
         ) : showAnimation ? (
           <Lottie
             animationData={animationData}
             loop={false}
             onComplete={() => setProofStep(QRcodeSteps.WAITING_FOR_MOBILE)}
-            style={{ width: 180, height: 180 }}
+            style={{ width: 220, height: 220 }}
           />
         ) : (
           <QRCodeSVG
             value={qrValue}
-            size={220}
+            size={260}
             bgColor={darkMode ? '#000000' : '#ffffff'}
             fgColor={darkMode ? '#ffffff' : '#000000'}
             level="Q"

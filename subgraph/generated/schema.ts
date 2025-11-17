@@ -189,6 +189,57 @@ export class Signer extends Entity {
   set treeIndex(value: BigInt) {
     this.set("treeIndex", Value.fromBigInt(value));
   }
+
+  get documentTypeId(): BigInt | null {
+    let value = this.get("documentTypeId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set documentTypeId(value: BigInt | null) {
+    if (!value) {
+      this.unset("documentTypeId");
+    } else {
+      this.set("documentTypeId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get documentTypeLabel(): string | null {
+    let value = this.get("documentTypeLabel");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set documentTypeLabel(value: string | null) {
+    if (!value) {
+      this.unset("documentTypeLabel");
+    } else {
+      this.set("documentTypeLabel", Value.fromString(<string>value));
+    }
+  }
+
+  get nullifier(): BigInt | null {
+    let value = this.get("nullifier");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set nullifier(value: BigInt | null) {
+    if (!value) {
+      this.unset("nullifier");
+    } else {
+      this.set("nullifier", Value.fromBigInt(<BigInt>value));
+    }
+  }
 }
 
 export class CensusRoot extends Entity {
@@ -508,6 +559,57 @@ export class PledgeEvent extends Entity {
   set logIndex(value: BigInt) {
     this.set("logIndex", Value.fromBigInt(value));
   }
+
+  get documentTypeId(): BigInt | null {
+    let value = this.get("documentTypeId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set documentTypeId(value: BigInt | null) {
+    if (!value) {
+      this.unset("documentTypeId");
+    } else {
+      this.set("documentTypeId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get documentTypeLabel(): string | null {
+    let value = this.get("documentTypeLabel");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set documentTypeLabel(value: string | null) {
+    if (!value) {
+      this.unset("documentTypeLabel");
+    } else {
+      this.set("documentTypeLabel", Value.fromString(<string>value));
+    }
+  }
+
+  get nullifier(): BigInt | null {
+    let value = this.get("nullifier");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set nullifier(value: BigInt | null) {
+    if (!value) {
+      this.unset("nullifier");
+    } else {
+      this.set("nullifier", Value.fromBigInt(<BigInt>value));
+    }
+  }
 }
 
 export class WeightChangeEvent extends Entity {
@@ -642,6 +744,144 @@ export class WeightChangeEvent extends Entity {
 
   set logIndex(value: BigInt) {
     this.set("logIndex", Value.fromBigInt(value));
+  }
+}
+
+export class IdentityVerificationEvent extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(
+      id != null,
+      "Cannot save IdentityVerificationEvent entity without an ID",
+    );
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type IdentityVerificationEvent must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("IdentityVerificationEvent", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): IdentityVerificationEvent | null {
+    return changetype<IdentityVerificationEvent | null>(
+      store.get_in_block("IdentityVerificationEvent", id),
+    );
+  }
+
+  static load(id: string): IdentityVerificationEvent | null {
+    return changetype<IdentityVerificationEvent | null>(
+      store.get("IdentityVerificationEvent", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get signer(): string {
+    let value = this.get("signer");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set signer(value: string) {
+    this.set("signer", Value.fromString(value));
+  }
+
+  get documentTypeId(): BigInt {
+    let value = this.get("documentTypeId");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set documentTypeId(value: BigInt) {
+    this.set("documentTypeId", Value.fromBigInt(value));
+  }
+
+  get documentTypeLabel(): string {
+    let value = this.get("documentTypeLabel");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set documentTypeLabel(value: string) {
+    this.set("documentTypeLabel", Value.fromString(value));
+  }
+
+  get nullifier(): BigInt {
+    let value = this.get("nullifier");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set nullifier(value: BigInt) {
+    this.set("nullifier", Value.fromBigInt(value));
+  }
+
+  get blockNumber(): BigInt {
+    let value = this.get("blockNumber");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set blockNumber(value: BigInt) {
+    this.set("blockNumber", Value.fromBigInt(value));
+  }
+
+  get timestamp(): BigInt {
+    let value = this.get("timestamp");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set timestamp(value: BigInt) {
+    this.set("timestamp", Value.fromBigInt(value));
+  }
+
+  get transactionHash(): Bytes {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes) {
+    this.set("transactionHash", Value.fromBytes(value));
   }
 }
 

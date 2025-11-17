@@ -192,6 +192,15 @@ contract ManifestoCensus is ICensusValidator, SelfVerificationRoot {
         return allowedAttestation[attestationId];
     }
 
+    /// @notice Returns the complete attestation allow list for off-chain consumers
+    function getAllowedAttestationIds() external view returns (bytes32[] memory) {
+        bytes32[] memory ids = new bytes32[](_attestationAllowListValues.length);
+        for (uint256 i = 0; i < _attestationAllowListValues.length; i++) {
+            ids[i] = _attestationAllowListValues[i];
+        }
+        return ids;
+    }
+
     /// @notice Exposes the hub address for off-chain tooling
     function identityVerificationHub() external view returns (address) {
         return address(_identityVerificationHubV2);

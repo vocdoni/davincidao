@@ -14,6 +14,9 @@ type Signer @entity(immutable: false) {
   pledgeBlock: BigInt!       # block number of pledge
   transactionHash: Bytes!    # tx hash of pledge
   treeIndex: BigInt!         # index in merkle tree (order of insertion)
+  documentTypeId: BigInt     # AttestationId (1=passport, 2=national ID, 3=aadhaar)
+  documentTypeLabel: String  # Human-readable label
+  nullifier: BigInt          # Action nullifier to audit duplicate attempts
 }
 
 """Census root snapshot (immutable - each update creates new entry)"""
@@ -44,6 +47,9 @@ type PledgeEvent @entity(immutable: true) {
   blockNumber: BigInt!       # block number
   transactionHash: Bytes!    # tx hash
   logIndex: BigInt!          # for ordering within block
+  documentTypeId: BigInt     # Document used for this pledge
+  documentTypeLabel: String  # Human-readable doc label
+  nullifier: BigInt          # Action nullifier recorded in the contract
 }
 
 """Weight change event - required for offchain census reconstruction"""
@@ -56,4 +62,16 @@ type WeightChangeEvent @entity(immutable: true) {
   blockTimestamp: BigInt!    # block timestamp
   transactionHash: Bytes!    # tx hash
   logIndex: BigInt!          # for ordering within block
+}
+
+"""Identity verification event with document type and nullifier context"""
+type IdentityVerificationEvent @entity(immutable: true) {
+  id: ID!                    # txHash-addressLowercase
+  signer: Signer!            # signer address reference
+  documentTypeId: BigInt!    # AttestationId emitted by the contract
+  documentTypeLabel: String! # Document label
+  nullifier: BigInt!         # Action nullifier to enforce uniqueness
+  blockNumber: BigInt!       # block number
+  timestamp: BigInt!         # timestamp
+  transactionHash: Bytes!    # tx hash
 }

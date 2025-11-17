@@ -19,7 +19,7 @@ contract DeployManifestoCensus is Script {
         string forbiddenCsv;
         string requiredNationality;
         bool allowPassport;
-        bool allowEuId;
+        bool allowNationalId;
         bool allowAadhaar;
         string manifestoPath;
         string manifestoTitle;
@@ -33,7 +33,7 @@ contract DeployManifestoCensus is Script {
 
         bytes32[] memory attestationAllowList = _buildAttestationAllowList(
             settings.allowPassport,
-            settings.allowEuId,
+            settings.allowNationalId,
             settings.allowAadhaar
         );
 
@@ -96,7 +96,8 @@ contract DeployManifestoCensus is Script {
         settings.forbiddenCsv = vm.envOr("SELF_FORBIDDEN_COUNTRIES", string(""));
         settings.requiredNationality = vm.envOr("SELF_REQUIRED_NATIONALITY", string(""));
         settings.allowPassport = vm.envOr("SELF_ALLOW_PASSPORT", true);
-        settings.allowEuId = vm.envOr("SELF_ALLOW_EU_ID", false);
+        bool legacyNationalIdDefault = vm.envOr("SELF_ALLOW_EU_ID", true);
+        settings.allowNationalId = vm.envOr("SELF_ALLOW_NATIONAL_ID", legacyNationalIdDefault);
         settings.allowAadhaar = vm.envOr("SELF_ALLOW_AADHAAR", false);
         settings.manifestoPath = vm.envOr("MANIFESTO_FILE", string("manifests/collective-freedom.md"));
         settings.manifestoTitle = vm.envOr(
@@ -110,12 +111,12 @@ contract DeployManifestoCensus is Script {
 
     function _buildAttestationAllowList(
         bool allowPassport,
-        bool allowEuId,
+        bool allowNationalId,
         bool allowAadhaar
     ) internal pure returns (bytes32[] memory list) {
         uint256 count;
         if (allowPassport) count++;
-        if (allowEuId) count++;
+        if (allowNationalId) count++;
         if (allowAadhaar) count++;
         require(count > 0, "No attestation types enabled");
 
@@ -124,7 +125,7 @@ contract DeployManifestoCensus is Script {
         if (allowPassport) {
             list[idx++] = AttestationId.E_PASSPORT;
         }
-        if (allowEuId) {
+        if (allowNationalId) {
             list[idx++] = AttestationId.EU_ID_CARD;
         }
         if (allowAadhaar) {

@@ -134,8 +134,9 @@ contract ManifestoCensusTest is Test {
         unformatted.ofacEnabled = false;
         unformatted.forbiddenCountries = new string[](0);
 
-        bytes32[] memory attestationIds = new bytes32[](1);
+        bytes32[] memory attestationIds = new bytes32[](2);
         attestationIds[0] = AttestationId.E_PASSPORT;
+        attestationIds[1] = AttestationId.EU_ID_CARD;
 
         census = new ManifestoCensusHarness(
             address(hub),
@@ -156,7 +157,20 @@ contract ManifestoCensusTest is Test {
     }
 
     function _sign(address account, string memory nationality) internal {
-        census.selfVerifyWithNationality(account, nextNullifier++, AttestationId.E_PASSPORT, nationality);
+        _signWithAttestation(account, AttestationId.E_PASSPORT, nationality);
+    }
+
+    function _signWithAttestation(address account, bytes32 attestationId, string memory nationality) internal {
+        census.selfVerifyWithNationality(account, nextNullifier++, attestationId, nationality);
+    }
+
+    function _signWithCustomNullifier(
+        address account,
+        bytes32 attestationId,
+        uint256 nullifier,
+        string memory nationality
+    ) internal {
+        census.selfVerifyWithNationality(account, nullifier, attestationId, nationality);
     }
 
     function test_ManifestoMetadata() public view {
@@ -191,8 +205,9 @@ contract ManifestoCensusTest is Test {
         assertFalse(ofacEnabled);
         assertEq(forbiddenCountries.length, 0);
         assertEq(uint24(nationality), 0);
-        assertEq(attestationIds.length, 1);
+        assertEq(attestationIds.length, 2);
         assertEq(attestationIds[0], AttestationId.E_PASSPORT);
+        assertEq(attestationIds[1], AttestationId.EU_ID_CARD);
         assertEq(keccak256(bytes(census.scopeLabel())), keccak256(bytes("manifesto-test")));
     }
 
@@ -335,6 +350,32 @@ contract ManifestoCensusTest is Test {
     function test_PledgeFunctionAlwaysReverts() public {
         vm.expectRevert(ManifestoCensus.SelfVerificationOnly.selector);
         census.pledge();
+    }
+
+    function test_GetAllowedAttestationIds() public {
+        bytes32[] memory ids = census.getAllowedAttestationIds();
+        assertEq(ids.length, 2);
+        assertEq(ids[0], AttestationId.E_PASSPORT);
+        assertEq(ids[1], AttestationId.EU_ID_CARD);
+    }
+
+    function test_NationalIdPledgesAreAccepted() public {
+        _signWithAttestation(alice, AttestationId.EU_ID_CARD, "USA");
+        assertTrue(census.hasPledged(alice), "National ID signer should be recorded");
+    }
+
+    function test_AadhaarNotAllowed() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(ManifestoCensus.UnsupportedAttestation.selector, AttestationId.AADHAAR)
+        );
+        _signWithAttestation(alice, AttestationId.AADHAAR, "USA");
+    }
+
+    function test_NullifierCannotBeReusedAcrossDocuments() public {
+        uint256 sharedNullifier = 777;
+        _signWithCustomNullifier(alice, AttestationId.E_PASSPORT, sharedNullifier, "USA");
+        vm.expectRevert(ManifestoCensus.NullifierAlreadyUsed.selector);
+        _signWithCustomNullifier(bob, AttestationId.EU_ID_CARD, sharedNullifier, "USA");
     }
 
     function test_NationalityRestrictionEnforced() public {
