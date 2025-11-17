@@ -7,22 +7,24 @@ interface ManifestoDisplayProps {
 }
 
 // Parse manifesto text with proper paragraph handling
+// Returns { title, content } where title is the main heading and content is everything else
 function parseManifestoText(text: string, darkMode: boolean = false) {
   const lines = text.split('\n')
-  const elements: JSX.Element[] = []
+  const titleElements: JSX.Element[] = []
+  const contentElements: JSX.Element[] = []
   let currentParagraph: string[] = []
   let elementIndex = 0
+  let titleFound = false
 
   const flushParagraph = () => {
     if (currentParagraph.length > 0) {
       const paragraphText = currentParagraph.join('\n')
       const parts = paragraphText.split(/(\*\*.*?\*\*)/)
 
-      elements.push(
-        <p key={`p-${elementIndex++}`} className="mb-4 text-left" style={{
+      const paragraph = (
+        <p key={`p-${elementIndex++}`} className="mb-4 text-left text-base sm:text-lg" style={{
           fontFamily: "'EB Garamond', serif",
-          fontSize: '1.125rem',
-          lineHeight: '1.4em',
+          lineHeight: '1.6em',
           color: darkMode ? '#e8d4b8' : '#1a1410',
           fontWeight: 400
         }}>
@@ -40,6 +42,8 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
           })}
         </p>
       )
+
+      contentElements.push(paragraph)
       currentParagraph = []
     }
   }
@@ -49,13 +53,12 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
     if (line.startsWith('# ')) {
       flushParagraph()
       const title = line.replace('# ', '')
-      elements.push(
+      titleElements.push(
         <div key={`h-wrapper-${elementIndex++}`}>
           <h1
-            className="text-center mb-4 mt-2"
+            className="text-center mb-4 mt-2 text-2xl sm:text-3xl md:text-4xl px-2"
             style={{
               fontFamily: "'EB Garamond', serif",
-              fontSize: '2rem',
               fontWeight: 800,
               color: darkMode ? '#f5e6d3' : '#0a0806',
               letterSpacing: '0.03em',
@@ -71,15 +74,16 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
           <div className="mb-6 border-b-2" style={{ borderColor: '#8b7355' }}></div>
         </div>
       )
+      titleFound = true
     }
     // Handle subheaders (lines starting with ##)
     else if (line.startsWith('## ')) {
       flushParagraph()
-      elements.push(
-        <h4 key={`h4-${elementIndex++}`} className="text-2xl mt-8 mb-4 text-left" style={{
+      contentElements.push(
+        <h4 key={`h4-${elementIndex++}`} className="text-xl sm:text-2xl mt-8 mb-4 text-left" style={{
           fontFamily: "'EB Garamond', serif",
           fontWeight: 600,
-          lineHeight: '1.2em',
+          lineHeight: '1.3em',
           color: darkMode ? '#e8d4b8' : '#1a1410',
           letterSpacing: '0.01em'
         }}>
@@ -100,13 +104,13 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
   // Flush any remaining paragraph
   flushParagraph()
 
-  return elements
+  return { title: titleElements, content: contentElements }
 }
 
 export function ManifestoDisplay({ metadata, loading, darkMode = false }: ManifestoDisplayProps) {
   if (loading) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-6 md:p-10 shadow-2xl mx-auto" style={{ width: '590px', minWidth: '590px' }}>
+      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-4 sm:p-6 md:p-10 shadow-2xl mx-auto w-full max-w-[590px]">
         <div className="animate-pulse">
           <div className="h-10 bg-[#c4a57b]/30 rounded w-3/4 mx-auto mb-4"></div>
           <div className="h-4 bg-[#c4a57b]/30 rounded w-1/2 mx-auto mb-8"></div>
@@ -122,7 +126,7 @@ export function ManifestoDisplay({ metadata, loading, darkMode = false }: Manife
 
   if (!metadata) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-6 md:p-10 shadow-2xl mx-auto" style={{ width: '590px', minWidth: '590px' }}>
+      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-4 sm:p-6 md:p-10 shadow-2xl mx-auto w-full max-w-[590px]">
         <p className="text-center font-light" style={{ color: '#3a2f1f' }}>Loading manifesto...</p>
       </div>
     )
@@ -134,11 +138,11 @@ export function ManifestoDisplay({ metadata, loading, darkMode = false }: Manife
 
   const borderColor = darkMode ? 'border-[#6a6560]' : 'border-[#c4a57b]'
 
+  const { title, content } = parseManifestoText(metadata.manifestoText, darkMode)
+
   return (
-    <div className={`relative ${bgColors} rounded-2xl border-2 ${borderColor} p-6 md:p-10 shadow-2xl transition-colors duration-300 mx-auto overflow-hidden`}
+    <div className={`relative ${bgColors} rounded-2xl border-2 ${borderColor} p-4 sm:p-6 md:p-10 shadow-2xl transition-colors duration-300 mx-auto overflow-hidden w-full max-w-[590px]`}
          style={{
-           width: '590px',
-           minWidth: '590px',
            boxShadow: darkMode
              ? 'inset 0 2px 4px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.5)'
              : 'inset 0 2px 4px rgba(0,0,0,0.06), 0 10px 30px rgba(0,0,0,0.15)',
@@ -149,40 +153,43 @@ export function ManifestoDisplay({ metadata, loading, darkMode = false }: Manife
              radial-gradient(ellipse at bottom right, rgba(139,115,85,${darkMode ? '0.3' : '0.15'}), transparent 40%)
            `
          }}>
-      {/* Vitruvian Man background image - fixed size, only visible within this container */}
-      <div className="absolute inset-0 pointer-events-none"
-           style={{
-             backgroundImage: 'url(/background.png)',
-             backgroundSize: '1127px',
-             backgroundPosition: 'center 187px',
-             backgroundRepeat: 'no-repeat',
-             opacity: darkMode ? 0.15 : 0.4,
-             mixBlendMode: darkMode ? 'lighten' : 'normal',
-             transition: 'opacity 300ms, mix-blend-mode 300ms',
-             WebkitMaskImage: 'radial-gradient(ellipse 95% 92% at center, black 85%, transparent 100%)',
-             maskImage: 'radial-gradient(ellipse 95% 92% at center, black 85%, transparent 100%)'
-           }}></div>
-
-      {/* Aged paper texture overlay */}
+      {/* Aged paper texture overlay - full container */}
       <div className="absolute inset-0 rounded-2xl opacity-20 pointer-events-none"
            style={{
              backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E")`,
              mixBlendMode: 'multiply'
            }}></div>
 
-      {/* Burn/fade edges effect */}
+      {/* Burn/fade edges effect - full container */}
       <div className="absolute inset-0 rounded-2xl pointer-events-none"
            style={{
              boxShadow: 'inset 0 0 60px rgba(139,115,85,0.2), inset 0 0 20px rgba(139,115,85,0.1)'
            }}></div>
 
-      {/* Manifesto Content */}
+      {/* Title Section (without background) */}
       <div className="relative z-10">
-        <div style={{
+        {title}
+      </div>
+
+      {/* Content Section (with Vitruvian Man background between the two lines) */}
+      <div className="relative overflow-hidden">
+        {/* Vitruvian Man background image - fills height between the two lines */}
+        <div className="absolute inset-0 pointer-events-none"
+             style={{
+               backgroundImage: 'url(/background.png)',
+               backgroundSize: 'auto 100%',
+               backgroundPosition: 'center top',
+               backgroundRepeat: 'no-repeat',
+               opacity: darkMode ? 0.15 : 0.4,
+               mixBlendMode: darkMode ? 'lighten' : 'normal',
+               transition: 'opacity 300ms, mix-blend-mode 300ms'
+             }}></div>
+
+        <div className="relative z-10" style={{
           fontSize: '1.125rem',
           textShadow: darkMode ? '0 1px 1px rgba(0,0,0,0.3)' : '0 1px 1px rgba(255,255,255,0.3)'
         }}>
-          {parseManifestoText(metadata.manifestoText, darkMode)}
+          {content}
         </div>
       </div>
 

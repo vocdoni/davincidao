@@ -642,16 +642,16 @@ function App() {
 
       {/* Header */}
       <header className={`border-b transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex justify-between items-center gap-2">
             {/* Logo and Title */}
-            <a href="https://davinci.vote" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <img src="/davinci-logo.svg" alt="DAVINCI" className="w-8 h-8" />
-              <span className={`text-sm font-medium uppercase tracking-wider ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-900'}`}>DAVINCI</span>
+            <a href="https://davinci.vote" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity">
+              <img src="/davinci-logo.svg" alt="DAVINCI" className="w-7 h-7 sm:w-8 sm:h-8" />
+              <span className={`text-xs sm:text-sm font-medium uppercase tracking-wider ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-900'}`}>DAVINCI</span>
             </a>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Dark Mode Toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
@@ -677,9 +677,10 @@ function App() {
                     signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
                   }
                 }}
-                className="px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
+                className="px-4 sm:px-8 py-2 sm:py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-xs sm:text-sm font-semibold shadow-lg hover:shadow-xl whitespace-nowrap"
               >
-                🪶 Sign the Manifesto
+                <span className="hidden sm:inline">🪶 Sign the Manifesto</span>
+                <span className="sm:hidden">🪶 Sign</span>
               </button>
             </div>
           </div>
@@ -687,34 +688,34 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-[1008px] mx-auto py-12 relative" style={{
+      <main className="max-w-[1008px] mx-auto py-6 sm:py-8 md:py-12 relative" style={{
         minHeight: 'calc(100vh - 200px)'
       }}>
-        <div className="space-y-10">
+        <div className="space-y-6 sm:space-y-8 md:space-y-10">
 
-          {/* Manifesto Text - scrollable container */}
-          <div className="overflow-x-auto">
+          {/* Manifesto Text */}
+          <div className="px-4 sm:px-6">
             <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} darkMode={darkMode} />
           </div>
 
           {/* Cards below manifesto */}
-          <div className="space-y-8 px-6">
+          <div className="space-y-6 sm:space-y-8 px-4 sm:px-6">
 
             {/* Stats & Sign Button */}
-            <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+            <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-[#D4C4AC] p-6 sm:p-8">
+              <h3 className="text-xl sm:text-2xl font-medium text-gray-900 mb-3 sm:mb-4 text-center" style={{ lineHeight: '1.1em' }}>
                 🪶 Sign the Manifesto
               </h3>
 
-              <p className="text-center text-gray-800 mb-8 text-base font-normal" style={{ lineHeight: '1.5em' }}>
+              <p className="text-center text-gray-800 mb-6 sm:mb-8 text-sm sm:text-base font-normal px-2" style={{ lineHeight: '1.5em' }}>
                 If you agree with these principles and refuse to be a spectator, add your signature and join us!
               </p>
 
-              <div className="text-center mb-8">
-                <p className="text-6xl font-medium text-gray-900 mb-3" style={{ lineHeight: '1em' }}>
+              <div className="text-center mb-6 sm:mb-8">
+                <p className="text-4xl sm:text-5xl md:text-6xl font-medium text-gray-900 mb-2 sm:mb-3" style={{ lineHeight: '1em' }}>
                   {totalPledges.toLocaleString()}
                 </p>
-                <p className="text-gray-700 text-sm font-normal" style={{ lineHeight: '1.1em' }}>
+                <p className="text-gray-700 text-xs sm:text-sm font-normal" style={{ lineHeight: '1.1em' }}>
                   {totalPledges === 1 ? 'signature' : 'signatures'}
                 </p>
               </div>
@@ -732,14 +733,14 @@ function App() {
             <AddressChecker onCheck={handleCheckAddress} onResolveENS={handleResolveENS} />
 
             {/* Census Info */}
-            <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+            <div className="bg-white/40 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-[#D4C4AC] p-6 sm:p-8">
+              <h3 className="text-xl sm:text-2xl font-medium text-gray-900 mb-3 sm:mb-4 text-center" style={{ lineHeight: '1.1em' }}>
                 🌳 Cryptographic Census
               </h3>
 
               {/* Explanation */}
-              <div className="mb-8">
-                <p className="text-center text-gray-800 font-normal text-base" style={{ lineHeight: '1.5em' }}>
+              <div className="mb-6 sm:mb-8">
+                <p className="text-center text-gray-800 font-normal text-sm sm:text-base px-2" style={{ lineHeight: '1.5em' }}>
                   Each new address is added to an on-chain <strong className="font-medium">zk-friendly Merkle tree</strong>, creating a
                   cryptographic structure that groups all signers. This census can be used by voting applications
                   as a <strong className="font-medium">trustless authentication mechanism</strong>, allowing manifesto
@@ -748,16 +749,16 @@ function App() {
               </div>
 
               {/* Census Details */}
-              <div className="space-y-5">
+              <div className="space-y-4 sm:space-y-5">
                 {/* Network */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
+                <div className="bg-white/60 rounded-lg sm:rounded-xl p-4 sm:p-5 border border-[#D4C4AC]">
                   <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-gray-700 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                     </svg>
-                    <span className="text-sm font-medium text-gray-700">Network</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">Network</span>
                   </div>
-                  <p className="text-base text-gray-900 font-medium">
+                  <p className="text-sm sm:text-base text-gray-900 font-medium">
                     {(() => {
                       const networks: Record<number, string> = {
                         1: 'Ethereum Mainnet',
@@ -773,12 +774,12 @@ function App() {
                 </div>
 
                 {/* Contract Address */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="bg-white/60 rounded-lg sm:rounded-xl p-4 sm:p-5 border border-[#D4C4AC]">
+                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                    <svg className="w-4 h-4 text-gray-700 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                     </svg>
-                    <span className="text-sm font-medium text-gray-700">Contract Address</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">Contract Address</span>
                   </div>
                   <a
                     href={(() => {
@@ -795,7 +796,7 @@ function App() {
                     })()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-xs text-gray-900 hover:text-gray-700 break-all block transition-colors group"
+                    className="font-mono text-[10px] sm:text-xs text-gray-900 hover:text-gray-700 break-all block transition-colors group"
                   >
                     <span className="group-hover:underline">{CONTRACT_ADDRESS}</span>
                     <svg className="w-3 h-3 inline-block ml-1 opacity-60 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -805,14 +806,14 @@ function App() {
                 </div>
 
                 {/* Root Hash */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="bg-white/60 rounded-lg sm:rounded-xl p-4 sm:p-5 border border-[#D4C4AC]">
+                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                    <svg className="w-4 h-4 text-gray-700 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                     </svg>
-                    <span className="text-sm font-medium text-gray-700">Current Root Hash</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">Current Root Hash</span>
                   </div>
-                  <p className="font-mono text-xs text-gray-900 break-all leading-relaxed">
+                  <p className="font-mono text-[10px] sm:text-xs text-gray-900 break-all leading-relaxed">
                     {censusRoot !== '0' ? `0x${BigInt(censusRoot).toString(16).padStart(64, '0')}` : (
                       <span className="text-gray-600 italic">Not yet initialized</span>
                     )}
@@ -825,13 +826,13 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className={`mt-16 py-12 border-t transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
-        <div className="max-w-[1008px] mx-auto px-6">
-          <div className={`text-center space-y-3 ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-800'}`}>
-            <p className="text-base italic font-normal" style={{ lineHeight: '1.1em' }}>
+      <footer className={`mt-12 sm:mt-16 py-8 sm:py-12 border-t transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
+        <div className="max-w-[1008px] mx-auto px-4 sm:px-6">
+          <div className={`text-center space-y-2 sm:space-y-3 ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-800'}`}>
+            <p className="text-sm sm:text-base italic font-normal" style={{ lineHeight: '1.3em' }}>
               Made with love by <a href="https://vocdoni.io" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#f5e6d3]' : 'hover:text-gray-900'}`}>Vocdoni</a>
             </p>
-            <p className={`text-xs font-normal ${darkMode ? 'text-[#c4a57b]' : 'text-gray-600'}`} style={{ lineHeight: '1.1em' }}>
+            <p className={`text-[10px] sm:text-xs font-normal ${darkMode ? 'text-[#c4a57b]' : 'text-gray-600'}`} style={{ lineHeight: '1.3em' }}>
               <a href="https://github.com/vocdoni/davinci-onchain-census/tree/manifesto" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#dbc2a5]' : 'hover:text-gray-800'}`}>Source Code</a>
               {' · '}
               License AGPLv3

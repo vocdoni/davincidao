@@ -98,19 +98,19 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
   }
 
   return (
-    <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-      <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+    <div className="bg-white/40 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-[#D4C4AC] p-6 sm:p-8">
+      <h3 className="text-xl sm:text-2xl font-medium text-gray-900 mb-3 sm:mb-4 text-center" style={{ lineHeight: '1.1em' }}>
         🔍 Check Address Status
       </h3>
 
-      <p className="text-center text-gray-800 mb-8 text-base font-normal" style={{ lineHeight: '1.5em' }}>
+      <p className="text-center text-gray-800 mb-6 sm:mb-8 text-sm sm:text-base font-normal px-2" style={{ lineHeight: '1.5em' }}>
         Verify if an address or ENS name has signed the manifesto.
       </p>
 
-      <div className="space-y-5">
+      <div className="space-y-4 sm:space-y-5">
         {/* Input */}
         <div>
-          <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-3">
+          <label htmlFor="address" className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
             Ethereum Address or ENS Name
           </label>
           <input
@@ -119,7 +119,7 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="0x... or vitalik.eth"
-            className="w-full px-4 py-3 border border-[#D4C4AC] bg-white/60 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-sm"
+            className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-[#D4C4AC] bg-white/60 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-xs sm:text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
           />
         </div>
@@ -128,7 +128,7 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
         <button
           onClick={handleCheck}
           disabled={checking || !input}
-          className="w-full px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+          className="w-full px-6 py-2.5 sm:py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm"
         >
           {checking ? (
             <span className="flex items-center justify-center gap-2">
@@ -145,12 +145,12 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
 
         {/* Result */}
         {result && (
-          <div className={`p-5 rounded-xl border ${
+          <div className={`p-4 sm:p-5 rounded-lg sm:rounded-xl border ${
             result.hasPledged
               ? 'bg-white/60 border-green-700/30'
               : 'bg-white/40 border-[#D4C4AC]'
           }`}>
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-2 sm:gap-3">
               {result.hasPledged ? (
                 <svg className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -160,28 +160,28 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               )}
-              <div className="flex-1">
-                <p className={`font-medium ${result.hasPledged ? 'text-green-900' : 'text-gray-700'}`}>
+              <div className="flex-1 min-w-0">
+                <p className={`font-medium text-sm sm:text-base ${result.hasPledged ? 'text-green-900' : 'text-gray-700'}`}>
                   {result.hasPledged ? '✓ Signed' : 'Not signed'}
                 </p>
-                <div className="mt-3 space-y-2 text-sm text-gray-700">
+                <div className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
                   {result.ensName && (
                     <p>
                       <span className="font-medium">ENS:</span>{' '}
-                      <span className="font-mono">{result.ensName}</span>
+                      <span className="font-mono break-all">{result.ensName}</span>
                     </p>
                   )}
                   {result.resolvedAddress && (
                     <p>
                       <span className="font-medium">Address:</span>{' '}
-                      <span className="font-mono text-xs break-all">{result.resolvedAddress}</span>
+                      <span className="font-mono text-[10px] sm:text-xs break-all">{result.resolvedAddress}</span>
                     </p>
                   )}
                   {result.hasPledged && result.timestamp && (
                     <>
                       <p>
                         <span className="font-medium">Signed on:</span>{' '}
-                        {formatDate(result.timestamp)}
+                        <span className="break-all">{formatDate(result.timestamp)}</span>
                       </p>
                       {result.blockNumber && (
                         <p>
@@ -204,7 +204,7 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
         )}
 
         {/* Helper text */}
-        <p className="text-xs text-gray-600 font-light">
+        <p className="text-[10px] sm:text-xs text-gray-600 font-light">
           Enter any Ethereum address or ENS name (e.g., vitalik.eth) to check if it has signed the manifesto.
         </p>
       </div>

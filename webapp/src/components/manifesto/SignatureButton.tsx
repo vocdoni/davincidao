@@ -11,14 +11,14 @@ interface SignatureButtonProps {
 export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, connected }: SignatureButtonProps) {
   if (pledgeStatus?.hasPledged) {
     return (
-      <div className="bg-white/60 border border-green-700/30 rounded-xl p-6 text-center">
-        <div className="flex items-center justify-center mb-3">
-          <svg className="w-5 h-5 text-green-700 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="bg-white/60 border border-green-700/30 rounded-lg sm:rounded-xl p-4 sm:p-6 text-center">
+        <div className="flex items-center justify-center mb-2 sm:mb-3">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-700 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          <p className="text-green-900 font-medium">You signed this manifesto</p>
+          <p className="text-green-900 font-medium text-sm sm:text-base">You signed this manifesto</p>
         </div>
-        <p className="text-sm text-gray-700 font-light">
+        <p className="text-xs sm:text-sm text-gray-700 font-light">
           {new Date(pledgeStatus.timestamp * 1000).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
@@ -34,7 +34,7 @@ export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, conn
     return (
       <button
         onClick={onConnect}
-        className="w-full py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors text-base"
+        className="w-full py-3 sm:py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors text-sm sm:text-base"
       >
         Connect Wallet to Sign
       </button>
@@ -46,7 +46,7 @@ export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, conn
     <button
       onClick={onSign}
       disabled={!connected || loading}
-      className="w-full py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
+      className="w-full py-3 sm:py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
     >
       {loading ? (
         <span className="flex items-center justify-center">
