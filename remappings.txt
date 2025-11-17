@@ -5,3 +5,4 @@ openzeppelin-contracts/=lib/openzeppelin-contracts/
 poseidon-solidity/=lib/poseidon-solidity/contracts/
 zk-kit.solidity/=lib/zk-kit.solidity/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@selfxyz/contracts/=lib/self/contracts/

@@ -1,18 +1,18 @@
 specVersion: 1.3.0
-description: We Are Not Spectators Manifesto Census - tracking pledges to The We Are Not Spectators Manifesto
-repository: https://github.com/vocdoni/davincidao
+description: Self Manifesto Census - tracking pledges verified through Self for manifesto campaigns
+repository: https://github.com/vocdoni/davinci-manifesto
 schema:
   file: ./schema.graphql
 indexerHints:
   prune: auto
 dataSources:
   - kind: ethereum/contract
-    name: WeAreNotSpectatorsManifestoCensus
-    network: mainnet
+    name: ManifestoCensus
+    network: celo
     source:
-      address: "0x82d9373Fe03fa66d133c56732DBE0ecCc7672Df1"
-      abi: WeAreNotSpectatorsManifestoCensus
-      startBlock: 23813322
+      address: "0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61"
+      abi: ManifestoCensus
+      startBlock: 51479999
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -22,9 +22,11 @@ dataSources:
         - CensusRoot
         - GlobalStats
         - PledgeEvent
+        - Account
+        - WeightChangeEvent
       abis:
-        - name: WeAreNotSpectatorsManifestoCensus
-          file: ./abis/WeAreNotSpectatorsManifestoCensus.json
+        - name: ManifestoCensus
+          file: ./abis/ManifestoCensus.json
       eventHandlers:
         - event: Pledged(indexed address,uint256)
           handler: handlePledged

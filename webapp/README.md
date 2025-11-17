@@ -1,10 +1,10 @@
-# DAVINCI Manifesto - Web Interface
+# Self Manifesto - Web Interface
 
-Web application for signing the DAVINCI Manifesto on-chain with cryptographic proof via Merkle trees.
+Web application for signing Self-verified manifestos on-chain with cryptographic proof via Merkle trees.
 
 ## How It Works
 
-The `WeAreNotSpectatorsManifestoCensus` smart contract stores the full manifesto text on-chain and maintains an append-only Merkle tree of all signers. When you sign:
+The `ManifestoCensus` smart contract stores the full manifesto text on-chain and maintains an append-only Merkle tree of all signers. When you sign:
 
 1. Contract verifies you haven't signed before
 2. Your address is added to a Lean-IMT Merkle tree
@@ -12,7 +12,6 @@ The `WeAreNotSpectatorsManifestoCensus` smart contract stores the full manifesto
 4. The root can be used by external contracts for trustless voting
 
 **Key Contract Functions:**
-- `pledge()` - Sign the manifesto (one-time action)
 - `hasPledged(address)` - Check if address has signed
 - `getCensusRoot()` - Get current Merkle root of all signers
 - `getRootBlockNumber(uint256)` - Validate a census root (ICensusValidator interface)
@@ -51,7 +50,7 @@ nano subgraph.yaml
 npx graph codegen
 npx graph build
 npx graph auth --studio $DEPLOY_KEY
-npx graph deploy --studio we-are-not-spectators
+npx graph deploy --studio self-manifesto
 ```
 
 ### 3. Configure Webapp
@@ -178,4 +177,4 @@ MIT License
 
 **Made with ❤️ for collective freedom**
 
-#WeAreNotSpectators
+#CollectiveFreedom

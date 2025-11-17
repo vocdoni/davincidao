@@ -1,0 +1,11 @@
+export const QRcodeSteps = {
+  DISCONNECTED: 0,
+  WAITING_FOR_MOBILE: 1,
+  MOBILE_CONNECTED: 2,
+  PROOF_GENERATION_STARTED: 3,
+  PROOF_GENERATION_FAILED: 4,
+  PROOF_GENERATED: 5,
+  PROOF_VERIFIED: 6
+} as const
+
+export type QRCodeStep = (typeof QRcodeSteps)[keyof typeof QRcodeSteps]

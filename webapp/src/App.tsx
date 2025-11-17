@@ -1,846 +1,631 @@
-import { useState, useEffect } from 'react'
-import { BrowserProvider, JsonRpcProvider } from 'ethers'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BrowserProvider, JsonRpcProvider, Wallet, getAddress } from 'ethers'
 import { toast, Toaster } from 'sonner'
 import { ManifestoContract } from '~/lib/manifesto-contract'
 import { initSubgraphClient, getSigner } from '~/lib/subgraph-client'
 import { ManifestoDisplay } from '~/components/manifesto/ManifestoDisplay'
-import { SignatureButton } from '~/components/manifesto/SignatureButton'
-import { AddressChecker } from '~/components/manifesto/AddressChecker'
 import type { ManifestoMetadata, PledgeStatus } from '~/types'
+import { SelfQR } from '~/self/SelfQR'
+import { buildSelfApp, getUniversalLink, type EndpointType, type SelfApp } from '~/self/builder'
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
-const SUBGRAPH_ENDPOINT = import.meta.env.VITE_SUBGRAPH_ENDPOINT || ''
-const CHAIN_ID = parseInt(import.meta.env.VITE_CHAIN_ID || '11155111')
+const CONTRACT_ADDRESS = (import.meta.env.VITE_CONTRACT_ADDRESS || '').trim()
+const RPC_URL = (import.meta.env.VITE_RPC_URL || 'https://forno.celo.org').trim()
+const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 42220)
+const SUBGRAPH_ENDPOINT = (import.meta.env.VITE_SUBGRAPH_ENDPOINT || '').trim()
+const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://celoscan.io'
 
-function App() {
-  const [account, setAccount] = useState<string | null>(null)
-  const [contract, setContract] = useState<ManifestoContract | null>(null)
+const SELF_SCOPE = import.meta.env.VITE_SELF_SCOPE || 'manifesto-v1'
+const SELF_ENDPOINT_TYPE = import.meta.env.VITE_SELF_ENDPOINT_TYPE || 'celo'
+const SELF_APP_NAME = import.meta.env.VITE_SELF_APP_NAME || 'Self Manifesto'
+const SELF_LOGO_URL = import.meta.env.VITE_SELF_LOGO_URL || '/self-logo.png'
+const SELF_MIN_AGE = Number(import.meta.env.VITE_SELF_MIN_AGE || 16)
+const SELF_OFAC_ENABLED = (import.meta.env.VITE_SELF_OFAC || 'false').toLowerCase() === 'true'
+const SELF_EXCLUDED_COUNTRIES = (import.meta.env.VITE_SELF_EXCLUDED_COUNTRIES || '')
+  .split(',')
+  .map((code: string) => code.trim().toUpperCase())
+  .filter((code: string) => code.length === 3)
+const SELF_DEEPLINK_CALLBACK = import.meta.env.VITE_SELF_DEEPLINK_CALLBACK || ''
+const SELF_USER_DATA = import.meta.env.VITE_SELF_USER_DATA || 'manifesto:v1'
+const SELF_REQUIRED_NATIONALITY = (import.meta.env.VITE_SELF_REQUIRED_NATIONALITY || '').toUpperCase()
+
+const RPC_FALLBACKS = Array.from(new Set([
+  RPC_URL,
+  'https://forno.celo.org',
+  'https://1rpc.io/celo',
+  'https://rpc.ankr.com/celo'
+])).filter(Boolean)
+
+const SELF_DOWNLOAD_URL = 'https://self.xyz'
+const SELF_DOCS_URL = 'https://docs.self.xyz'
+
+type LocalWalletInfo = {
+  address: string
+  mnemonic: string
+  privateKey: string
+}
+
+const STATUS_COPY: Record<string, string> = {
+  idle: 'Select an address to begin.',
+  preparing: 'Preparing a Self QR code for your address…',
+  awaiting: 'Open the Self app and scan the QR code (or tap the button below).',
+  verifying: 'Proof received! Waiting for the Self relayer to submit your pledge on-chain…',
+  polling: 'Still waiting for the pledge transaction. This can take a few seconds.',
+  success: 'All set! Your signature is on-chain.',
+  error: 'Something looks off. Please double-check and try again.'
+}
+
+function formatDate(timestamp: number) {
+  if (!timestamp) return ''
+  return new Date(timestamp * 1000).toLocaleString()
+}
+
+export default function App() {
   const [metadata, setMetadata] = useState<ManifestoMetadata | null>(null)
-  const [pledgeStatus, setPledgeStatus] = useState<PledgeStatus | null>(null)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [totalPledges, setTotalPledges] = useState<number>(0)
   const [censusRoot, setCensusRoot] = useState<string>('0')
-  const [loadingContract, setLoadingContract] = useState(false)
-  const [pledging, setPledging] = useState(false)
-  const [initialLoading, setInitialLoading] = useState(true)
+  const [ , ] = useState('')
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null)
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<PledgeStatus | null>(null)
+  const [ , ] = useState(false)
+  const [selfApp, setSelfApp] = useState<SelfApp | null>(null)
+  const [universalLink, setUniversalLink] = useState('')
+  const [selfStatus, setSelfStatus] = useState<'idle' | 'preparing' | 'awaiting' | 'verifying' | 'polling' | 'success' | 'error'>(
+    'idle'
+  )
+  const [selfError, setSelfError] = useState<string | null>(null)
+  const [generatedWallet, setGeneratedWallet] = useState<LocalWalletInfo | null>(null)
+  const [showRecovery, setShowRecovery] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
-    // Check localStorage for saved preference
-    const saved = localStorage.getItem('darkMode')
+    const saved = localStorage.getItem('manifesto-dark-mode')
     return saved ? JSON.parse(saved) : false
   })
+  const [account, setAccount] = useState<string | null>(null)
 
-  // Save dark mode preference to localStorage
+  const rpcProviders = useMemo(
+    () => RPC_FALLBACKS.map((rpc) => ({ rpc, provider: new JsonRpcProvider(rpc) })),
+    []
+  )
+
+  const fetchPledgeStatus = useCallback(async (address: string): Promise<PledgeStatus> => {
+    let baseStatus: PledgeStatus | null = null
+
+    for (const { rpc, provider } of rpcProviders) {
+      try {
+        const readContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+        baseStatus = await readContract.getPledgeStatus(address)
+        break
+      } catch (error) {
+        console.warn('Status check failed on provider', rpc, error)
+      }
+    }
+
+    if (!baseStatus) {
+      throw new Error('All RPC endpoints failed to respond')
+    }
+
+    if (baseStatus.hasPledged && SUBGRAPH_ENDPOINT) {
+      try {
+        const signerData = await getSigner(address)
+        if (signerData) {
+          baseStatus = {
+            ...baseStatus,
+            treeIndex: parseInt(signerData.treeIndex),
+            transactionHash: signerData.transactionHash
+          }
+        }
+      } catch (error) {
+        console.warn('Subgraph lookup failed for signer info:', error)
+      }
+    }
+
+    return baseStatus
+  }, [rpcProviders])
+
   useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode))
+    localStorage.setItem('manifesto-dark-mode', JSON.stringify(darkMode))
   }, [darkMode])
 
-  // Initialize subgraph on mount (optional, only for tree index data)
+  useEffect(() => {
+    const key = 'manifesto-generated-wallet'
+    const stored = localStorage.getItem(key)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as LocalWalletInfo
+        if (parsed.address && parsed.mnemonic && parsed.privateKey) {
+          setGeneratedWallet(parsed)
+          return
+        }
+      } catch (error) {
+        console.warn('Failed to parse stored wallet:', error)
+      }
+    }
+
+    const wallet = Wallet.createRandom()
+    const info: LocalWalletInfo = {
+      address: wallet.address,
+      mnemonic: wallet.mnemonic?.phrase || '',
+      privateKey: wallet.privateKey
+    }
+    localStorage.setItem(key, JSON.stringify(info))
+    setGeneratedWallet(info)
+  }, [])
+
+  useEffect(() => {
+    if (generatedWallet && !selectedAddress) {
+      setSelectedAddress(generatedWallet.address)
+      setSelectedLabel('Auto-generated wallet')
+    }
+  }, [generatedWallet, selectedAddress])
+
+  useEffect(() => {
+    if (selfStatus !== 'success') {
+      setShowRecovery(false)
+    }
+  }, [selfStatus])
+
   useEffect(() => {
     if (SUBGRAPH_ENDPOINT) {
       initSubgraphClient(SUBGRAPH_ENDPOINT)
     }
-    // Always load census data from contract (includes pledge count)
     loadCensusData()
-  }, [])
-
-  // Periodic updates for census data (every 15 seconds)
-  // Note: We get pledge count directly from contract, no GraphQL needed
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadCensusData()
-    }, 15000) // 15 seconds
-
+    const interval = setInterval(() => loadCensusData(), 15000)
     return () => clearInterval(interval)
   }, [])
 
-  // Load manifesto metadata on mount (read-only, no wallet needed)
   useEffect(() => {
-    const loadManifestoMetadata = async () => {
-      // Check localStorage cache first
-      const cacheKey = `manifesto_metadata_${CONTRACT_ADDRESS}`
-      const cachedData = localStorage.getItem(cacheKey)
-
-      if (cachedData) {
-        try {
-          const cached = JSON.parse(cachedData)
-          console.log('✅ Loaded metadata from cache')
-          setMetadata(cached)
-          setInitialLoading(false)
-          return // Use cached data, no RPC call needed
-        } catch {
-          console.warn('Failed to parse cached metadata, will fetch from RPC')
-          localStorage.removeItem(cacheKey)
-        }
-      }
-
-      // Multiple RPC endpoints for fallback
-      const rpcEndpoints: Record<number, string[]> = {
-        1: [
-          'https://eth.llamarpc.com',
-          'https://ethereum-rpc.publicnode.com',
-          'https://rpc.mevblocker.io',
-          'https://0xrpc.io/eth',
-          'https://eth1.lava.build',
-          'https://eth.blockrazor.xyz',
-          'https://eth-mainnet.public.blastapi.io'
-        ],
-        11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
-        8453: [
-          'https://base.llamarpc.com',
-          'https://base-rpc.publicnode.com',
-          'https://base.drpc.org',
-          'https://mainnet.base.org',
-          'https://base-mainnet.public.blastapi.io',
-          'https://1rpc.io/base',
-          'https://base-mainnet.gateway.tatum.io'
-        ],
-        42161: ['https://arb1.arbitrum.io/rpc'],
-        10: ['https://mainnet.optimism.io'],
-        137: ['https://polygon-rpc.com']
-      }
-
-      const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
-
-      for (let i = 0; i < rpcs.length; i++) {
-        const rpcUrl = rpcs[i]
-        try {
-          console.log(`Attempt ${i + 1}/${rpcs.length}: Loading manifesto from ${rpcUrl}`)
-
-          const provider = new JsonRpcProvider(rpcUrl)
-          const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
-
-          const meta = await readOnlyContract.getMetadata()
-          console.log('✅ Metadata loaded successfully from', rpcUrl)
-
-          // Cache the metadata in localStorage
-          localStorage.setItem(cacheKey, JSON.stringify(meta))
-
-          setMetadata(meta)
-          setInitialLoading(false)
-          return // Success - exit the loop
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-          console.error(`❌ RPC ${rpcUrl} failed:`, errorMsg)
-
-          // If this is the last RPC, show error to user
-          if (i === rpcs.length - 1) {
-            console.error('All RPC endpoints failed. Error details:', error)
-            toast.error(
-              <div>
-                <p className="font-semibold">Failed to load manifesto</p>
-                <p className="text-xs mt-1">All RPC endpoints failed. Please try again later.</p>
-                <p className="text-xs text-gray-600 mt-1 font-mono">{errorMsg.substring(0, 100)}</p>
-              </div>,
-              { duration: 10000 }
-            )
-            setInitialLoading(false) // Stop loading even on error
-          }
-          // Continue to next RPC
-        }
-      }
-    }
-
     loadManifestoMetadata()
   }, [])
 
-  // Listen for network/account changes
   useEffect(() => {
-    if (!window.ethereum) return
-
-    const handleChainChanged = (...args: unknown[]) => {
-      const chainIdHex = args[0] as string
-      const newChainId = parseInt(chainIdHex, 16)
-      if (newChainId !== CHAIN_ID) {
-        toast.warning(`Network changed. Please reconnect to use chain ID ${CHAIN_ID}`)
-        // Reset state
-        setAccount(null)
-        setContract(null)
-        setPledgeStatus(null)
-      } else {
-        toast.success('Network switched! Please reconnect your wallet.')
-        // User switched to correct network, encourage reconnect
-        setAccount(null)
-        setContract(null)
-        setPledgeStatus(null)
-      }
-    }
-
-    const handleAccountsChanged = (...args: unknown[]) => {
-      const accounts = args[0] as string[]
-      if (accounts.length === 0) {
-        toast.info('Wallet disconnected')
-        setAccount(null)
-        setContract(null)
-        setPledgeStatus(null)
-      } else if (account && accounts[0].toLowerCase() !== account.toLowerCase()) {
-        toast.info('Account changed. Please reconnect.')
-        setAccount(null)
-        setContract(null)
-        setPledgeStatus(null)
-      }
-    }
-
-    window.ethereum?.on('chainChanged', handleChainChanged)
-    window.ethereum?.on('accountsChanged', handleAccountsChanged)
-
-    return () => {
-      window.ethereum?.removeListener('chainChanged', handleChainChanged)
-      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged)
-    }
-  }, [account])
-
-  // Load census data from contract (includes pledge count)
-  const loadCensusData = async () => {
-    const rpcEndpoints: Record<number, string[]> = {
-      1: [
-        'https://eth.llamarpc.com',
-        'https://ethereum-rpc.publicnode.com',
-        'https://rpc.mevblocker.io',
-        'https://0xrpc.io/eth',
-        'https://eth1.lava.build',
-        'https://eth.blockrazor.xyz',
-        'https://eth-mainnet.public.blastapi.io'
-      ],
-      11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
-      8453: [
-        'https://base.llamarpc.com',
-        'https://base-rpc.publicnode.com',
-        'https://base.drpc.org',
-        'https://mainnet.base.org',
-        'https://base-mainnet.public.blastapi.io',
-        'https://1rpc.io/base',
-        'https://base-mainnet.gateway.tatum.io'
-      ],
-      42161: ['https://arb1.arbitrum.io/rpc'],
-      10: ['https://mainnet.optimism.io'],
-      137: ['https://polygon-rpc.com']
-    }
-
-    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
-
-    for (const rpcUrl of rpcs) {
-      try {
-        const provider = new JsonRpcProvider(rpcUrl)
-        const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
-        const info = await readOnlyContract.getCensusInfo()
-
-        // Update state with contract data
-        setCensusRoot(info.root)
-        setTotalPledges(info.totalPledges)
-
-        console.log('✅ Census data loaded from contract:', rpcUrl, `(${info.totalPledges} pledges)`)
-        return // Success
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`❌ Census data from ${rpcUrl} failed:`, errorMsg)
-        // Continue to next RPC
-      }
-    }
-
-    // All RPCs failed
-    console.error('Failed to load census data from all RPCs')
-    toast.error('Failed to load census data. Please refresh the page.')
-  }
-
-  // Resolve ENS name to address
-  const handleResolveENS = async (ensName: string): Promise<string | null> => {
-    // ENS is only available on Mainnet, always use Mainnet for resolution
-    const mainnetRpcs = [
-      'https://eth.llamarpc.com',
-      'https://ethereum-rpc.publicnode.com',
-      'https://rpc.mevblocker.io',
-      'https://0xrpc.io/eth',
-      'https://eth1.lava.build',
-      'https://eth.blockrazor.xyz',
-      'https://eth-mainnet.public.blastapi.io'
-    ]
-
-    for (const rpcUrl of mainnetRpcs) {
-      try {
-        const provider = new JsonRpcProvider(rpcUrl)
-        const resolved = await provider.resolveName(ensName)
-        if (resolved) {
-          console.log('✅ ENS resolved from', rpcUrl)
-          return resolved
-        }
-      } catch (error) {
-        console.error(`❌ ENS resolution from ${rpcUrl} failed:`, error)
-        // Continue to next RPC
-      }
-    }
-
-    console.error('Failed to resolve ENS from all RPCs')
-    return null
-  }
-
-  // Check address pledge status
-  const handleCheckAddress = async (address: string) => {
-    // Use connected contract if available
-    if (contract) {
-      try {
-        const status = await contract.getPledgeStatus(address)
-
-        // Get tree index from subgraph if available
-        let treeIndex: number | undefined
-        if (SUBGRAPH_ENDPOINT && status.hasPledged) {
-          try {
-            const signerData = await getSigner(address)
-            if (signerData) {
-              treeIndex = parseInt(signerData.treeIndex)
-            }
-          } catch {
-            console.log('Subgraph not available for tree index')
-          }
-        }
-
-        return {
-          hasPledged: status.hasPledged,
-          timestamp: status.timestamp,
-          blockNumber: status.blockNumber,
-          treeIndex
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-        console.error('Error checking with connected wallet:', errorMsg)
-        // Fall through to RPC fallback
-      }
-    }
-
-    // Fallback to read-only RPCs
-    const rpcEndpoints: Record<number, string[]> = {
-      1: [
-        'https://eth.llamarpc.com',
-        'https://ethereum-rpc.publicnode.com',
-        'https://rpc.mevblocker.io',
-        'https://0xrpc.io/eth',
-        'https://eth1.lava.build',
-        'https://eth.blockrazor.xyz',
-        'https://eth-mainnet.public.blastapi.io'
-      ],
-      11155111: ['https://ethereum-sepolia-rpc.publicnode.com'],
-      8453: [
-        'https://base.llamarpc.com',
-        'https://base-rpc.publicnode.com',
-        'https://base.drpc.org',
-        'https://mainnet.base.org',
-        'https://base-mainnet.public.blastapi.io',
-        'https://1rpc.io/base',
-        'https://base-mainnet.gateway.tatum.io'
-      ],
-      42161: ['https://arb1.arbitrum.io/rpc'],
-      10: ['https://mainnet.optimism.io'],
-      137: ['https://polygon-rpc.com']
-    }
-
-    const rpcs = rpcEndpoints[CHAIN_ID] || ['https://eth.llamarpc.com']
-
-    for (const rpcUrl of rpcs) {
-      try {
-        const provider = new JsonRpcProvider(rpcUrl)
-        const pledgeContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
-        const status = await pledgeContract.getPledgeStatus(address)
-
-        // Get tree index from subgraph if available
-        let treeIndex: number | undefined
-        if (SUBGRAPH_ENDPOINT && status.hasPledged) {
-          try {
-            const signerData = await getSigner(address)
-            if (signerData) {
-              treeIndex = parseInt(signerData.treeIndex)
-            }
-          } catch {
-            console.log('Subgraph not available for tree index')
-          }
-        }
-
-        console.log('✅ Address check successful from', rpcUrl)
-        return {
-          hasPledged: status.hasPledged,
-          timestamp: status.timestamp,
-          blockNumber: status.blockNumber,
-          treeIndex
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`❌ Address check from ${rpcUrl} failed:`, errorMsg)
-        // Continue to next RPC
-      }
-    }
-
-    // All RPCs failed
-    const error = new Error('Failed to check address pledge status from all RPC endpoints')
-    console.error(error.message)
-    toast.error('Failed to check address. Please try again.')
-    throw error
-  }
-
-  // Helper to add network to wallet
-  const addNetworkToWallet = async (chainId: number) => {
-    interface NetworkConfig {
-      chainId: string
-      chainName: string
-      nativeCurrency: { name: string; symbol: string; decimals: number }
-      rpcUrls: string[]
-      blockExplorerUrls: string[]
-    }
-
-    const networkConfigs: Record<number, NetworkConfig> = {
-      11155111: { // Sepolia
-        chainId: '0xaa36a7',
-        chainName: 'Sepolia Testnet',
-        nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://sepolia.infura.io/v3/'],
-        blockExplorerUrls: ['https://sepolia.etherscan.io']
-      },
-      1: { // Mainnet
-        chainId: '0x1',
-        chainName: 'Ethereum Mainnet',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [
-          'https://eth.llamarpc.com',
-          'https://ethereum-rpc.publicnode.com',
-          'https://rpc.mevblocker.io',
-          'https://0xrpc.io/eth',
-          'https://eth1.lava.build',
-          'https://eth.blockrazor.xyz',
-          'https://eth-mainnet.public.blastapi.io'
-        ],
-        blockExplorerUrls: ['https://etherscan.io']
-      },
-      8453: { // Base
-        chainId: '0x2105',
-        chainName: 'Base',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [
-          'https://base.llamarpc.com',
-          'https://base-rpc.publicnode.com',
-          'https://base.drpc.org',
-          'https://mainnet.base.org',
-          'https://base-mainnet.public.blastapi.io',
-          'https://1rpc.io/base',
-          'https://base-mainnet.gateway.tatum.io'
-        ],
-        blockExplorerUrls: ['https://basescan.org']
-      },
-      42161: { // Arbitrum One
-        chainId: '0xa4b1',
-        chainName: 'Arbitrum One',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://arb1.arbitrum.io/rpc'],
-        blockExplorerUrls: ['https://arbiscan.io']
-      },
-      10: { // Optimism
-        chainId: '0xa',
-        chainName: 'Optimism',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://mainnet.optimism.io'],
-        blockExplorerUrls: ['https://optimistic.etherscan.io']
-      },
-      137: { // Polygon
-        chainId: '0x89',
-        chainName: 'Polygon',
-        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: ['https://polygon-rpc.com'],
-        blockExplorerUrls: ['https://polygonscan.com']
-      }
-    }
-
-    const config = networkConfigs[chainId]
-    if (!config) {
-      throw new Error(`Network configuration for chain ID ${chainId} not found`)
-    }
-
-    if (!window.ethereum) {
-      throw new Error('No Ethereum provider found')
-    }
-
-    await window.ethereum.request({
-      method: 'wallet_addEthereumChain',
-      params: [config],
-    })
-  }
-
-  // Connect wallet
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast.error('Please install MetaMask or another Web3 wallet')
+    if (!selectedAddress) {
+      setSelectedStatus(null)
+      setSelfApp(null)
+      setUniversalLink('')
+      setSelfStatus('idle')
+      setSelfError(null)
       return
     }
 
-    setLoadingContract(true)
+    setSelfStatus('preparing')
+    setSelfError(null)
+
+    const fetchStatus = async () => {
+      try {
+        const status = await fetchPledgeStatus(selectedAddress)
+        setSelectedStatus(status)
+        if (status.hasPledged) {
+          setSelfStatus('success')
+        }
+      } catch (error) {
+        console.error('Failed to load pledge status:', error)
+      }
+    }
+
+    fetchStatus()
+
     try {
+      const endpointType = (SELF_ENDPOINT_TYPE as EndpointType) || 'celo'
+      const disclosures: Record<string, unknown> = {
+        minimumAge: SELF_MIN_AGE,
+        nationality: true,
+        date_of_birth: true,
+        ofac: SELF_OFAC_ENABLED
+      }
+      if (SELF_EXCLUDED_COUNTRIES.length) {
+        disclosures.excludedCountries = SELF_EXCLUDED_COUNTRIES
+      }
+
+      const app = buildSelfApp({
+        appName: SELF_APP_NAME,
+        scope: SELF_SCOPE,
+        endpoint: CONTRACT_ADDRESS.toLowerCase(),
+        endpointType,
+        userIdType: 'hex',
+        userId: selectedAddress,
+        logoBase64: SELF_LOGO_URL,
+        userDefinedData: SELF_USER_DATA,
+        deeplinkCallback: SELF_DEEPLINK_CALLBACK || undefined,
+        disclosures
+      })
+
+      setSelfApp(app)
+      setUniversalLink(getUniversalLink(app))
+      setSelfStatus((prev) => (prev === 'success' ? 'success' : 'awaiting'))
+    } catch (error) {
+      console.error('Failed to build Self app payload:', error)
+      setSelfStatus('error')
+      setSelfError('We could not prepare the QR code. Please reload and try again.')
+    }
+  }, [selectedAddress, fetchPledgeStatus])
+
+  async function loadManifestoMetadata() {
+    const cacheKey = `manifesto_metadata_${CONTRACT_ADDRESS}`
+    const cached = localStorage.getItem(cacheKey)
+
+    if (cached) {
+      try {
+        setMetadata(JSON.parse(cached))
+        setInitialLoading(false)
+        return
+      } catch (error) {
+        console.warn('Failed to parse cached metadata:', error)
+        localStorage.removeItem(cacheKey)
+      }
+    }
+
+    for (const rpc of RPC_FALLBACKS) {
+      try {
+        const provider = new JsonRpcProvider(rpc)
+        const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+        const meta = await readOnlyContract.getMetadata()
+        setMetadata(meta)
+        localStorage.setItem(cacheKey, JSON.stringify(meta))
+        setInitialLoading(false)
+        return
+      } catch (error) {
+        console.warn(`Metadata load failed from ${rpc}:`, error)
+      }
+    }
+
+    setInitialLoading(false)
+    toast.error('Unable to load manifesto metadata. Please refresh the page.')
+  }
+
+  async function loadCensusData() {
+    for (const rpc of RPC_FALLBACKS) {
+      try {
+        const provider = new JsonRpcProvider(rpc)
+        const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+        const info = await readOnlyContract.getCensusInfo()
+        setCensusRoot(info.root)
+        setTotalPledges(info.totalPledges)
+        return
+      } catch (error) {
+        console.warn(`Census data load failed from ${rpc}:`, error)
+      }
+    }
+  }
+
+  const handleConnectWallet = async () => {
+    try {
+      if (!window.ethereum) {
+        toast.error('Please install a wallet (e.g., MetaMask) to continue.')
+        return
+      }
+
       const provider = new BrowserProvider(window.ethereum)
+      const accounts = (await window.ethereum.request?.({ method: 'eth_requestAccounts' })) as string[]
+      if (!accounts || accounts.length === 0) {
+        return
+      }
 
-      // Request account access
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-
-      const network = await provider.getNetwork()
-      if (Number(network.chainId) !== CHAIN_ID) {
-        // Automatically request network switch
+      const desiredChain = `0x${CHAIN_ID.toString(16)}`
+      const currentChain = (await window.ethereum.request?.({ method: 'eth_chainId' })) as string
+      if (currentChain && currentChain.toLowerCase() !== desiredChain.toLowerCase()) {
         try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${CHAIN_ID.toString(16)}` }],
-          })
-          toast.success(`Switched to chain ID ${CHAIN_ID}`)
-          // Refresh provider after network switch
-          const newProvider = new BrowserProvider(window.ethereum)
-          const newSigner = await newProvider.getSigner()
-          const address = await newSigner.getAddress()
-
-          setAccount(address)
-
-          // Initialize contract with new provider
-          const contractInstance = new ManifestoContract(newProvider, CONTRACT_ADDRESS, newSigner)
-          setContract(contractInstance)
-
-          // Load contract metadata
-          const meta = await contractInstance.getMetadata()
-          setMetadata(meta)
-
-          // Load pledge status
-          const status = await contractInstance.getPledgeStatus(address)
-          setPledgeStatus(status)
-
-          toast.success('Wallet connected')
-          setLoadingContract(false)
-          return
-        } catch (switchError) {
-          // Network switch failed or was rejected
-          const errorCode = switchError && typeof switchError === 'object' && 'code' in switchError ? switchError.code : null
-          if (errorCode === 4902) {
-            // Chain not added to wallet, try to add it
-            try {
-              await addNetworkToWallet(CHAIN_ID)
-              toast.info('Network added! Please try connecting again.')
-            } catch {
-              toast.error(`Please manually add chain ID ${CHAIN_ID} to your wallet`)
-            }
-          } else {
-            toast.error(`Please switch to chain ID ${CHAIN_ID} in your wallet`)
-          }
-          setLoadingContract(false)
+          await window.ethereum.request?.({ method: 'wallet_switchEthereumChain', params: [{ chainId: desiredChain }] })
+        } catch (error) {
+          toast.error('Please switch your wallet to the Celo network (chain 42220).')
+          console.error('Failed to switch network:', error)
           return
         }
       }
 
       const signer = await provider.getSigner()
-      const address = await signer.getAddress()
-
-      setAccount(address)
-
-      // Initialize contract
-      const contractInstance = new ManifestoContract(provider, CONTRACT_ADDRESS, signer)
-      setContract(contractInstance)
-
-      // Load contract metadata
-      const meta = await contractInstance.getMetadata()
-      setMetadata(meta)
-
-      // Load pledge status
-      const status = await contractInstance.getPledgeStatus(address)
-      setPledgeStatus(status)
-
-      toast.success('Wallet connected')
+      const walletAddress = await signer.getAddress()
+      setAccount(walletAddress)
+      setSelectedAddress(getAddress(walletAddress))
+      setSelectedLabel('Connected wallet')
+      toast.success('Wallet connected successfully.')
     } catch (error) {
-      console.error('Error connecting wallet:', error)
-      const errorMsg = error instanceof Error ? error.message : 'Failed to connect wallet'
-      toast.error(errorMsg)
-    } finally {
-      setLoadingContract(false)
+      console.error('Wallet connection failed:', error)
+      toast.error('Unable to connect wallet.')
     }
   }
 
-  // Sign the manifesto
-  const handleSign = async () => {
-    if (!contract || !account) {
-      toast.error('Please connect your wallet first')
-      return
-    }
 
-    setPledging(true)
+  const handleSelfSuccess = async () => {
+    if (!selectedAddress) return
+    setSelfStatus('verifying')
+    setSelfError(null)
+
     try {
-      toast.info('Confirm the transaction in your wallet...')
-
-      const txHash = await contract.pledge()
-
-      toast.success(
-        <div>
-          <p className="font-semibold">Manifesto signed!</p>
-          <p className="text-sm">Tx: {txHash.slice(0, 10)}...</p>
-        </div>
-      )
-
-      // Reload status
-      const status = await contract.getPledgeStatus(account)
-      setPledgeStatus(status)
-
-      // Reload census data after a delay (wait for blockchain to confirm)
-      setTimeout(() => {
-        loadCensusData()
-      }, 5000)
+      const status = await waitForOnchainConfirmation(selectedAddress)
+      setSelectedStatus(status)
+      setSelfStatus('success')
+      loadCensusData()
+      toast.success('Manifesto signed! Thank you for taking part.')
     } catch (error) {
-      console.error('Error signing:', error)
-
-      const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : null
-      const errorMsg = error instanceof Error ? error.message : 'Failed to sign manifesto'
-
-      if (errorCode === 'ACTION_REJECTED') {
-        toast.error('Transaction rejected')
-      } else if (errorMsg.includes('AlreadyPledged')) {
-        toast.error('You have already signed the manifesto')
-      } else {
-        toast.error(errorMsg)
-      }
-    } finally {
-      setPledging(false)
+      console.error('Polling error:', error)
+      setSelfStatus('error')
+      setSelfError(error instanceof Error ? error.message : 'Verification timed out. Please try again.')
     }
   }
 
-  // Show loader until manifesto is loaded
-  if (initialLoading) {
-    return (
-      <div className="min-h-screen bg-[#dbc2a5] flex items-center justify-center">
-        <div className="text-center">
-          {/* DAVINCI Logo */}
-          <div className="mb-8 flex justify-center">
-            <img src="/davinci-logo.svg" alt="DAVINCI" className="w-24 h-24 animate-pulse" />
-          </div>
+  const waitForOnchainConfirmation = async (address: string) => {
+    const maxAttempts = 20
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const status = await fetchPledgeStatus(address)
+      if (status.hasPledged) {
+        return status
+      }
+      setSelfStatus('polling')
+      await new Promise((resolve) => setTimeout(resolve, 4000))
+    }
+    throw new Error('We did not see the pledge on-chain yet. Please refresh and try again in a minute.')
+  }
 
-          {/* Loading Spinner */}
-          <div className="mb-6">
-            <div className="relative w-16 h-16 mx-auto">
-              <div className="absolute inset-0 border-4 border-[#D4C4AC] rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-[#7A6746] border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          </div>
+  const downloadRecoveryFile = (wallet: LocalWalletInfo) => {
+    const content = `Self Manifesto Wallet\n\nAddress: ${wallet.address}\nMnemonic: ${wallet.mnemonic}\nPrivate Key: ${wallet.privateKey}\n`
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'manifesto-wallet.txt'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
-          {/* Loading Text */}
-          <h2 className="text-2xl font-medium text-gray-900 mb-2" style={{ lineHeight: '1.1em' }}>
-            Loading Manifesto...
-          </h2>
-          <p className="text-sm text-gray-700 font-normal" style={{ lineHeight: '1.1em' }}>
-            Connecting to {(() => {
-              const networks: Record<number, string> = {
-                1: 'Ethereum Mainnet',
-                11155111: 'Sepolia Testnet',
-                8453: 'Base',
-                42161: 'Arbitrum One',
-                10: 'Optimism',
-                137: 'Polygon'
-              }
-              return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
-            })()}
-          </p>
-        </div>
-      </div>
-    )
+  const handleSelfError = (data?: { error_code?: string; reason?: string }) => {
+    console.error('Self verification error:', data)
+    setSelfStatus('error')
+    const message = data?.reason || data?.error_code || 'Verification failed. Please retry.'
+    setSelfError(message)
+    toast.error(message)
+  }
+
+  const selectedAlreadySigned = selectedStatus?.hasPledged
+  const requirementItems: string[] = [`Be at least ${SELF_MIN_AGE} years old.`]
+
+  if (SELF_REQUIRED_NATIONALITY) {
+    requirementItems.push(`Use a passport issued by ${SELF_REQUIRED_NATIONALITY}.`)
+  } else if (SELF_EXCLUDED_COUNTRIES.length) {
+    requirementItems.push(`The following countries are excluded: ${SELF_EXCLUDED_COUNTRIES.join(', ')}.`)
+  } else {
+    requirementItems.push('Passports from any supported country are welcome.')
+  }
+
+  if (SELF_OFAC_ENABLED) {
+    requirementItems.push('Individuals on the OFAC sanctions list cannot participate.')
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-[#1a1410]' : 'bg-[#dbc2a5]'}`}>
-      <Toaster position="top-right" />
+    <div className={darkMode ? 'bg-[#0c0a09] text-white min-h-screen' : 'bg-[#f8f1e6] text-gray-900 min-h-screen'}>
+      <Toaster position="top-center" richColors closeButton />
+      <div className="max-w-[1200px] mx-auto px-4 py-8">
+        <header className="mb-10 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="uppercase tracking-[0.3em] text-sm text-gray-500 dark:text-gray-300">Manifesto</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">Collective Freedom</h1>
+            </div>
+            <button
+              onClick={() => setDarkMode((prev: boolean) => !prev)}
+              className="px-4 py-2 rounded-full border border-gray-300 dark:border-white/30 text-sm"
+            >
+              {darkMode ? 'Light Mode' : 'Dark Mode'}
+            </button>
+          </div>
+          <p className="text-base text-gray-700 dark:text-gray-300 max-w-3xl">
+            Sign privately with Self using your official documents. Your information never leaves your device and only an anonymous proof reaches Celo, keeping every signer untraceable while the community can still verify the pledge count on-chain.
+          </p>
+        </header>
 
-      {/* Header */}
-      <header className={`border-b transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
-            {/* Logo and Title */}
-            <a href="https://davinci.vote" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <img src="/davinci-logo.svg" alt="DAVINCI" className="w-8 h-8" />
-              <span className={`text-sm font-medium uppercase tracking-wider ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-900'}`}>DAVINCI</span>
-            </a>
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
+          <ManifestoDisplay metadata={metadata} loading={initialLoading} darkMode={darkMode} totalPledges={totalPledges} />
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              {/* Dark Mode Toggle */}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-full transition-colors ${darkMode ? 'hover:bg-[#3a3530]' : 'hover:bg-[#D4C4AC]/30'}`}
-                aria-label="Toggle dark mode"
-              >
-                {darkMode ? (
-                  <svg className="w-5 h-5 text-[#dbc2a5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
+          <div className="space-y-6">
+            <section className="bg-white dark:bg-[#151515] rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-lg">
+              <div className="mb-4">
+                <p className="text-sm uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Verify & Sign</p>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pick your address, then scan with Self.</h2>
+              </div>
+
+              <div className="space-y-4">
+
+                {generatedWallet && (
+                  <div className="rounded-2xl border border-blue-200 dark:border-blue-500/40 bg-blue-50 p-4 text-sm space-y-4 dark:bg-[#0d1b2a]">
+                    <div>
+                      <p className="font-semibold text-blue-900 dark:text-blue-200">Your manifesto wallet</p>
+                      <p className="text-xs text-blue-900/80 dark:text-blue-100 font-mono break-all">{generatedWallet.address}</p>
+                      <p className="text-xs text-blue-900/70 dark:text-blue-200 mt-2">
+                        This wallet stays on your device. After signing, we will guide you through storing the recovery phrase securely.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-blue-200 dark:border-blue-400/40 bg-white dark:bg-[#0b1220] p-4">
+                      <p className="text-xs uppercase tracking-wide text-blue-900/70 dark:text-blue-200">Currently signing as</p>
+                      {selectedAddress ? (
+                        <>
+                          <p className="font-mono text-xs break-all text-blue-900 dark:text-blue-100 mt-1">{selectedAddress}</p>
+                          {selectedLabel && (
+                            <p className="text-xs text-blue-900/70 dark:text-blue-200 mt-1">{selectedLabel}</p>
+                          )}
+                          {selectedStatus?.hasPledged && (
+                            <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-2">
+                              Already signed on {formatDate(selectedStatus.timestamp)}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-blue-900/70 dark:text-blue-200 mt-1">
+                          No address selected yet. Choose one of the options below to continue.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedAddress(generatedWallet.address)
+                          setSelectedLabel('Auto-generated wallet')
+                          toast.success('Auto-generated wallet selected.')
+                        }}
+                        className="px-3 py-1.5 rounded-full border border-blue-300 dark:border-blue-400 text-xs disabled:opacity-50 text-blue-900 dark:text-blue-100"
+                        disabled={selectedAddress === generatedWallet.address}
+                      >
+                        Use auto wallet
+                      </button>
+                      <button
+                        onClick={handleConnectWallet}
+                        className="px-3 py-1.5 rounded-full border border-blue-300 dark:border-blue-400 text-xs text-blue-900 dark:text-blue-100"
+                      >
+                        {account ? 'Refresh connected wallet' : 'Use connected wallet'}
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
 
-              {/* Sign Button */}
-              <button
-                onClick={() => {
-                  const signCard = document.getElementById('sign-card')
-                  if (signCard) {
-                    signCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }
-                }}
-                className="px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 active:scale-95 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
-              >
-                🪶 Sign the Manifesto
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-[1008px] mx-auto py-12 relative" style={{
-        minHeight: 'calc(100vh - 200px)'
-      }}>
-        <div className="space-y-10">
-
-          {/* Manifesto Text - scrollable container */}
-          <div className="overflow-x-auto">
-            <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} darkMode={darkMode} />
-          </div>
-
-          {/* Cards below manifesto */}
-          <div className="space-y-8 px-6">
-
-            {/* Stats & Sign Button */}
-            <div id="sign-card" className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
-                🪶 Sign the Manifesto
-              </h3>
-
-              <p className="text-center text-gray-800 mb-8 text-base font-normal" style={{ lineHeight: '1.5em' }}>
-                If you agree with these principles and refuse to be a spectator, add your signature and join us!
-              </p>
-
-              <div className="text-center mb-8">
-                <p className="text-6xl font-medium text-gray-900 mb-3" style={{ lineHeight: '1em' }}>
-                  {totalPledges.toLocaleString()}
-                </p>
-                <p className="text-gray-700 text-sm font-normal" style={{ lineHeight: '1.1em' }}>
-                  {totalPledges === 1 ? 'signature' : 'signatures'}
-                </p>
-              </div>
-
-              <SignatureButton
-                pledgeStatus={pledgeStatus}
-                onSign={handleSign}
-                onConnect={connectWallet}
-                loading={pledging}
-                connected={!!account}
-              />
-            </div>
-
-            {/* Address Checker */}
-            <AddressChecker onCheck={handleCheckAddress} onResolveENS={handleResolveENS} />
-
-            {/* Census Info */}
-            <div className="bg-white/40 backdrop-blur-sm rounded-2xl border border-[#D4C4AC] p-8">
-              <h3 className="text-2xl font-medium text-gray-900 mb-4 text-center" style={{ lineHeight: '1.1em' }}>
-                🌳 Cryptographic Census
-              </h3>
-
-              {/* Explanation */}
-              <div className="mb-8">
-                <p className="text-center text-gray-800 font-normal text-base" style={{ lineHeight: '1.5em' }}>
-                  Each new address is added to an on-chain <strong className="font-medium">zk-friendly Merkle tree</strong>, creating a
-                  cryptographic structure that groups all signers. This census can be used by voting applications
-                  as a <strong className="font-medium">trustless authentication mechanism</strong>, allowing manifesto
-                  signers to participate in governance.
-                </p>
-              </div>
-
-              {/* Census Details */}
-              <div className="space-y-5">
-                {/* Network */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-700">Network</span>
+                {!selectedAlreadySigned && selectedAddress && (
+                  <div className="rounded-2xl border border-purple-200 dark:border-purple-500/40 bg-purple-50 p-4 text-sm space-y-2 dark:bg-[#1b1025]">
+                    <p className="font-semibold text-purple-900 dark:text-purple-100">Requirements verified by Self</p>
+                    <ul className="list-disc pl-5 space-y-1 text-purple-900/80 dark:text-purple-100/80">
+                      {requirementItems.map((item, index) => (
+                        <li key={index}>{item}</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-purple-900/70 dark:text-purple-200">
+                      Self checks these conditions on your phone so nothing sensitive ever leaves your device.
+                    </p>
                   </div>
-                  <p className="text-base text-gray-900 font-medium">
-                    {(() => {
-                      const networks: Record<number, string> = {
-                        1: 'Ethereum Mainnet',
-                        11155111: 'Sepolia Testnet',
-                        8453: 'Base',
-                        42161: 'Arbitrum One',
-                        10: 'Optimism',
-                        137: 'Polygon'
+                )}
+
+                {!selectedAlreadySigned && selfApp && selectedAddress && (
+                  <div className="rounded-2xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-[#111111] grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="flex flex-col items-center gap-3">
+                      <SelfQR selfApp={selfApp} onSuccess={handleSelfSuccess} onError={handleSelfError} darkMode={darkMode} />
+                      <button
+                        onClick={() => window.open(universalLink, '_blank')}
+                        className="text-xs px-3 py-2 rounded-full border border-gray-300 dark:border-white/20 text-gray-700 dark:text-gray-200"
+                      >
+                        Open Self on this device
+                      </button>
+                      <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 dark:text-gray-300">
+                        <a href={SELF_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="underline">
+                          Download Self
+                        </a>
+                        <span className="hidden sm:inline">•</span>
+                        <a href={SELF_DOCS_URL} target="_blank" rel="noreferrer" className="underline">
+                          Official docs
+                        </a>
+                      </div>
+                    </div>
+                    <div className="text-sm space-y-3">
+                      <p className="font-medium text-gray-900 dark:text-white">{STATUS_COPY[selfStatus]}</p>
+                      {selfError && <p className="text-xs text-red-600 dark:text-red-400">{selfError}</p>}
+                      {!SELF_DEEPLINK_CALLBACK && (
+                        <p className="text-xs text-gray-600 dark:text-gray-300">
+                          Tip: After verifying, Self will bring you back automatically.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedAlreadySigned && selectedStatus && (
+                  <div className="rounded-2xl border border-emerald-600/30 bg-emerald-50/80 dark:bg-emerald-500/10 p-4 text-sm">
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">You already signed the manifesto</p>
+                    <p className="text-gray-700 dark:text-gray-200">Signature date: {formatDate(selectedStatus.timestamp)}</p>
+                    <a
+                      href={
+                        selectedStatus.transactionHash
+                          ? `${BLOCK_EXPLORER_URL}/tx/${selectedStatus.transactionHash}`
+                          : `${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`
                       }
-                      return networks[CHAIN_ID] || `Chain ${CHAIN_ID}`
-                    })()}
-                  </p>
-                </div>
-
-                {/* Contract Address */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-700">Contract Address</span>
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs underline text-emerald-800 dark:text-emerald-200"
+                    >
+                      View pledge on explorer
+                    </a>
                   </div>
-                  <a
-                    href={(() => {
-                      const explorers: Record<number, string> = {
-                        1: 'etherscan.io',
-                        11155111: 'sepolia.etherscan.io',
-                        8453: 'basescan.org',
-                        42161: 'arbiscan.io',
-                        10: 'optimistic.etherscan.io',
-                        137: 'polygonscan.com'
-                      }
-                      const explorer = explorers[CHAIN_ID] || 'etherscan.io'
-                      return `https://${explorer}/address/${CONTRACT_ADDRESS}`
-                    })()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-xs text-gray-900 hover:text-gray-700 break-all block transition-colors group"
-                  >
-                    <span className="group-hover:underline">{CONTRACT_ADDRESS}</span>
-                    <svg className="w-3 h-3 inline-block ml-1 opacity-60 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
+                )}
 
-                {/* Root Hash */}
-                <div className="bg-white/60 rounded-xl p-5 border border-[#D4C4AC]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-700">Current Root Hash</span>
-                  </div>
-                  <p className="font-mono text-xs text-gray-900 break-all leading-relaxed">
-                    {censusRoot !== '0' ? `0x${BigInt(censusRoot).toString(16).padStart(64, '0')}` : (
-                      <span className="text-gray-600 italic">Not yet initialized</span>
+                {selectedAlreadySigned && generatedWallet && selectedAddress === generatedWallet.address && (
+                  <div className="rounded-2xl border border-amber-400/60 bg-amber-50/90 dark:bg-amber-500/10 p-4 text-sm space-y-3">
+                    <p className="font-semibold text-amber-900 dark:text-amber-200">
+                      Important: save this wallet’s recovery phrase
+                    </p>
+                    <p className="text-amber-900/80 dark:text-amber-200">
+                      This address now represents your signature. Write down the phrase below or download a backup file to keep it safe.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setShowRecovery((prev) => !prev)}
+                        className="px-3 py-1.5 rounded-full border border-amber-600/60 text-xs"
+                      >
+                        {showRecovery ? 'Hide recovery phrase' : 'Reveal recovery phrase'}
+                      </button>
+                      <button
+                        onClick={() => downloadRecoveryFile(generatedWallet)}
+                        className="px-3 py-1.5 rounded-full border border-amber-600/60 text-xs"
+                      >
+                        Download backup file
+                      </button>
+                    </div>
+                    {showRecovery && (
+                      <div className="bg-white/90 dark:bg-black/40 rounded-xl border border-amber-500/40 p-3 space-y-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-200">Recovery phrase</p>
+                          <p className="font-mono text-xs break-words text-gray-900 dark:text-white">{generatedWallet.mnemonic}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-200">Private key</p>
+                          <p className="font-mono text-xs break-all text-gray-900 dark:text-white">{generatedWallet.privateKey}</p>
+                        </div>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(`${generatedWallet.mnemonic}\n${generatedWallet.privateKey}`)}
+                          className="text-xs underline text-amber-800 dark:text-amber-200"
+                        >
+                          Copy to clipboard
+                        </button>
+                      </div>
                     )}
-                  </p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="bg-white dark:bg-[#151515] rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-lg">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Verification data</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Live Merkle root and contract reference</p>
+                </div>
+                <a
+                  className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 text-xs text-gray-700 dark:text-gray-200"
+                  href={`${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View contract
+                </a>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Current Merkle root</p>
+                  <p className="font-mono text-xs break-all text-gray-900 dark:text-white mt-3">{censusRoot}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Used to verify every pledge on-chain</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1a1a1a] dark:to-[#111111] p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400">Contract address</p>
+                  <a
+                    className="font-mono text-xs break-all text-blue-700 dark:text-blue-300 underline mt-3 block"
+                    href={`${BLOCK_EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {CONTRACT_ADDRESS}
+                  </a>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Runs on Celo mainnet with Self verification</p>
                 </div>
               </div>
-            </div>
+            </section>
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className={`mt-16 py-12 border-t transition-colors duration-300 ${darkMode ? 'bg-[#1a1410] border-[#3a3530]' : 'bg-[#dbc2a5] border-[#D4C4AC]'}`}>
-        <div className="max-w-[1008px] mx-auto px-6">
-          <div className={`text-center space-y-3 ${darkMode ? 'text-[#dbc2a5]' : 'text-gray-800'}`}>
-            <p className="text-base italic font-normal" style={{ lineHeight: '1.1em' }}>
-              Made with love by <a href="https://vocdoni.io" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#f5e6d3]' : 'hover:text-gray-900'}`}>Vocdoni</a>
-            </p>
-            <p className={`text-xs font-normal ${darkMode ? 'text-[#c4a57b]' : 'text-gray-600'}`} style={{ lineHeight: '1.1em' }}>
-              <a href="https://github.com/vocdoni/davinci-onchain-census/tree/manifesto" target="_blank" rel="noopener noreferrer" className={`underline ${darkMode ? 'hover:text-[#dbc2a5]' : 'hover:text-gray-800'}`}>Source Code</a>
-              {' · '}
-              License AGPLv3
-            </p>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   )
 }
-
-export default App

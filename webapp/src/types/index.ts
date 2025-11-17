@@ -21,6 +21,8 @@ export interface PledgeStatus {
   hasPledged: boolean
   timestamp: number
   blockNumber?: number
+  transactionHash?: string
+  treeIndex?: number
 }
 
 export interface CensusInfo {

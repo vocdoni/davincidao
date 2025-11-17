@@ -1,6 +1,19 @@
-# We Are Not Spectators Manifesto Census
+# Self Manifesto Census
 
-On-chain registry of addresses that have pledged to The We Are Not Spectators Manifesto with cryptographic proof via Merkle trees.
+Trustless registry of manifesto signers gated by Self zk verification. Each deployment can carry its own manifesto copy, requirements, and Self scope.
+
+## Live deployments
+
+| Manifesto | Network | Contract | Start Block | Self Scope | Verification Config | Subgraph |
+| --- | --- | --- | --- | --- | --- | --- |
+| Civic Alliance for Streets Without Dog Shit | Celo mainnet | `0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61` | `51479999` | `manifesto-clean-streets` | `0xc8de7aa840ecfaccfedf1f7f3517006c1b90e192ab00cc8733b56fdbadbefbde` | `https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2` |
+| Collective Freedom (legacy) | Celo mainnet | `0x28640CE15B4C2B7BF847F81c01F952ef538578E8` | `51471863` | `manifesto-v1` | `0xc8de7aa840ecfaccfedf1f7f3517006c1b90e192ab00cc8733b56fdbadbefbde` | `https://api.studio.thegraph.com/query/1704875/self-manifesto/v0` |
+
+`deployments/manifesto/deploy.sol` reads metadata from files in `manifests/`. Define new campaigns by providing:
+
+- Manifesto text file (`MANIFESTO_FILE`)
+- Title, authors, and publication date env vars
+- Unique `SELF_SCOPE_SEED` so Self nullifiers stay isolated
 
 ## Quick Start
 
@@ -26,10 +39,16 @@ forge build
 # Run tests
 forge test
 
-# Deploy to testnet (Sepolia)
+# Deploy to Celo mainnet with custom metadata
+source .env
+MANIFESTO_FILE=manifests/civic-alliance.md \
+MANIFESTO_TITLE="Manifesto of the Civic Alliance for Streets Without Dog Shit" \
+MANIFESTO_AUTHORS="Civic Alliance" \
+MANIFESTO_DATE="2025-02-05" \
+SELF_SCOPE_SEED="manifesto-clean-streets" \
 forge script deployments/manifesto/deploy.sol --rpc-url $RPC_URL --broadcast --verify
 
-# Note the deployed contract address
+# Note the deployed contract address + start block printed by the script
 ```
 
 ### 3. Deploy Subgraph
@@ -38,16 +57,19 @@ forge script deployments/manifesto/deploy.sol --rpc-url $RPC_URL --broadcast --v
 cd subgraph
 
 # Install dependencies
-npm install
+pnpm install
 
-# Update subgraph.yaml with contract address and startBlock
-# Then generate code and build
-npx graph codegen
-npx graph build
+# Generate types and build
+pnpm run codegen
+pnpm run build
 
-# Deploy to The Graph Studio
-npx graph auth --studio $DEPLOY_KEY
-npx graph deploy --studio we-are-not-spectators-manifesto
+# Deploy to The Graph Studio (requires deploy key)
+GRAPH_ACCESS_TOKEN=<deploy-key> \
+graph deploy self-manifesto \
+  --node https://api.studio.thegraph.com/deploy/ \
+  --ipfs https://api.thegraph.com/ipfs/ \
+  --version-label v0.0.2 \
+  --skip-migrations
 ```
 
 ### 4. Run Web App
@@ -56,14 +78,19 @@ npx graph deploy --studio we-are-not-spectators-manifesto
 cd webapp
 
 # Install dependencies
-npm install
+pnpm install
 
-# Create .env file
-cat > .env << 'EOF'
-VITE_CONTRACT_ADDRESS=0x...  # Your deployed contract
-VITE_CHAIN_ID=11155111        # Sepolia testnet
-VITE_SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/.../we-are-not-spectators-manifesto/v1.0.0
-VITE_WALLET_CONNECT_PROJECT_ID=...  # Optional: WalletConnect
+# Update webapp/.env with your deployment coordinates, e.g.
+cat > webapp/.env <<'EOF'
+VITE_CONTRACT_ADDRESS=0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61
+VITE_RPC_URL=https://forno.celo.org
+VITE_CHAIN_ID=42220
+VITE_SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2
+VITE_BLOCK_EXPLORER_URL=https://celoscan.io
+VITE_SELF_SCOPE=manifesto-clean-streets
+VITE_SELF_APP_NAME=Self Manifesto
+VITE_SELF_MIN_AGE=16
+VITE_SELF_USER_DATA=manifesto:clean-streets
 EOF
 
 # Run dev server
@@ -94,10 +121,10 @@ Visit http://localhost:5173
 
 ### View Functions
 
-- `TITLE() → string` - Title of the manifesto
-- `AUTHORS() → string` - "Yoav Weiss, Vitalik Buterin, Marissa Posner"
-- `DATE() → string` - "2025-11-12"
-- `MANIFESTO() → string` - Full manifesto text (9000 chars)
+- `TITLE() → string` - Title of the manifesto (set at deployment)
+- `AUTHORS() → string` - Author credits
+- `DATE() → string` - Publication date
+- `MANIFESTO() → string` - Full manifesto text stored on-chain
 - `pledgeTimestamp(address) → uint256` - When an address pledged
 - `pledgeCount() → uint256` - Total number of signers
 - `pledgedBefore(address, uint256 cutoff) → bool` - Check if pledged before timestamp

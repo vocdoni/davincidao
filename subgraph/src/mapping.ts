@@ -2,7 +2,7 @@ import { BigInt } from "@graphprotocol/graph-ts";
 import {
   Pledged,
   CensusRootUpdated,
-} from "../generated/WeAreNotSpectatorsManifestoCensus/WeAreNotSpectatorsManifestoCensus";
+} from "../generated/ManifestoCensus/ManifestoCensus";
 import { Signer, CensusRoot, GlobalStats, PledgeEvent, Account, WeightChangeEvent } from "../generated/schema";
 
 const GLOBAL_STATS_ID = "global";

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Test script for the new subgraph
-SUBGRAPH_URL="https://api.studio.thegraph.com/query/1704875/davincidao-test-3/v1.0.4"
+# Test script for the Self Manifesto subgraph
+SUBGRAPH_URL="https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2"
 
-echo "🧪 Testing subgraph: davincidao-test-3"
+echo "🧪 Testing subgraph: self-manifesto (v0.0.2)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -16,19 +16,19 @@ echo ""
 echo "2️⃣  Checking for accounts..."
 curl -s -X POST "$SUBGRAPH_URL" \
   -H "Content-Type: application/json" \
-  -d '{"query": "{ accounts(first: 5, orderBy: weight, orderDirection: desc) { id address weight lastUpdatedAt } }"}' | jq .
+  -d '{"query": "{ accounts(first: 5, orderBy: currentWeight, orderDirection: desc) { id address currentWeight } }"}' | jq .
 
 echo ""
-echo "3️⃣  Checking for delegations..."
+echo "3️⃣  Checking for recent weight change events..."
 curl -s -X POST "$SUBGRAPH_URL" \
   -H "Content-Type: application/json" \
-  -d '{"query": "{ tokenDelegations(first: 5, where: { isDelegated: true }) { id tokenId nftIndex delegate owner delegatedAt } }"}' | jq .
+  -d '{"query": "{ weightChangeEvents(first: 5, orderBy: blockNumber, orderDirection: desc) { id blockNumber previousWeight newWeight account { id } } }"}' | jq .
 
 echo ""
 echo "4️⃣  Checking global stats..."
 curl -s -X POST "$SUBGRAPH_URL" \
   -H "Content-Type: application/json" \
-  -d '{"query": "{ globalStats(id: \"global\") { totalDelegations totalAccounts totalWeight lastUpdatedAt } }"}' | jq .
+  -d '{"query": "{ globalStats(id: \"global\") { totalPledges lastPledgeAt currentRoot nextTreeIndex } }"}' | jq .
 
 echo ""
 echo "✅ Test complete!"
