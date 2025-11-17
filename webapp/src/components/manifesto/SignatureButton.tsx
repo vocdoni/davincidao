@@ -1,14 +1,17 @@
 import { PledgeStatus } from '~/types'
+import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 
 interface SignatureButtonProps {
   pledgeStatus: PledgeStatus | null
   onSign: () => void
-  onConnect?: () => void
   loading?: boolean
   connected: boolean
 }
 
-export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, connected }: SignatureButtonProps) {
+export function SignatureButton({ pledgeStatus, onSign, loading, connected }: SignatureButtonProps) {
+  const { open } = useAppKit()
+  const { isConnected } = useAppKitAccount()
+
   if (pledgeStatus?.hasPledged) {
     return (
       <div className="bg-white/60 border border-green-700/30 rounded-lg sm:rounded-xl p-4 sm:p-6 text-center">
@@ -29,14 +32,14 @@ export function SignatureButton({ pledgeStatus, onSign, onConnect, loading, conn
     )
   }
 
-  // Not connected - show connect button
-  if (!connected && onConnect) {
+  // Not connected - show custom connect button that opens AppKit modal
+  if (!isConnected && !connected) {
     return (
       <button
-        onClick={onConnect}
+        onClick={() => open()}
         className="w-full py-3 sm:py-3.5 px-6 bg-gray-900 text-white rounded-full font-medium hover:bg-gray-800 transition-colors text-sm sm:text-base"
       >
-        Connect Wallet to Sign
+        Connect Wallet
       </button>
     )
   }

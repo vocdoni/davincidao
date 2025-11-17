@@ -1,25 +1,29 @@
 import { useState, useEffect } from 'react'
 import { BrowserProvider, JsonRpcProvider } from 'ethers'
 import { toast, Toaster } from 'sonner'
+import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react'
 import { ManifestoContract } from '~/lib/manifesto-contract'
 import { initSubgraphClient, getSigner } from '~/lib/subgraph-client'
 import { ManifestoDisplay } from '~/components/manifesto/ManifestoDisplay'
 import { SignatureButton } from '~/components/manifesto/SignatureButton'
 import { AddressChecker } from '~/components/manifesto/AddressChecker'
 import type { ManifestoMetadata, PledgeStatus } from '~/types'
+import './lib/walletconnect' // Initialize WalletConnect
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
 const SUBGRAPH_ENDPOINT = import.meta.env.VITE_SUBGRAPH_ENDPOINT || ''
 const CHAIN_ID = parseInt(import.meta.env.VITE_CHAIN_ID || '11155111')
 
 function App() {
+  const { address, isConnected } = useAppKitAccount()
+  const { walletProvider } = useAppKitProvider('eip155')
+
   const [account, setAccount] = useState<string | null>(null)
   const [contract, setContract] = useState<ManifestoContract | null>(null)
   const [metadata, setMetadata] = useState<ManifestoMetadata | null>(null)
   const [pledgeStatus, setPledgeStatus] = useState<PledgeStatus | null>(null)
   const [totalPledges, setTotalPledges] = useState<number>(0)
   const [censusRoot, setCensusRoot] = useState<string>('0')
-  const [loadingContract, setLoadingContract] = useState(false)
   const [pledging, setPledging] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [darkMode, setDarkMode] = useState(() => {
@@ -32,6 +36,38 @@ function App() {
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(darkMode))
   }, [darkMode])
+
+  // Sync wallet provider state with local state
+  useEffect(() => {
+    const syncWalletState = async () => {
+      if (isConnected && address && walletProvider) {
+        try {
+          // Type assertion for walletProvider - AppKit provides an EIP-1193 compatible provider
+          const ethersProvider = new BrowserProvider(walletProvider as any)
+          const signer = await ethersProvider.getSigner()
+          const signerAddress = await signer.getAddress()
+
+          setAccount(signerAddress)
+
+          // Initialize contract
+          const contractInstance = new ManifestoContract(ethersProvider, CONTRACT_ADDRESS, signer)
+          setContract(contractInstance)
+
+          // Load pledge status
+          const status = await contractInstance.getPledgeStatus(signerAddress)
+          setPledgeStatus(status)
+        } catch (error) {
+          console.error('Error syncing wallet state:', error)
+        }
+      } else {
+        setAccount(null)
+        setContract(null)
+        setPledgeStatus(null)
+      }
+    }
+
+    syncWalletState()
+  }, [isConnected, address, walletProvider])
 
   // Initialize subgraph on mount (optional, only for tree index data)
   useEffect(() => {
@@ -373,183 +409,6 @@ function App() {
     throw error
   }
 
-  // Helper to add network to wallet
-  const addNetworkToWallet = async (chainId: number) => {
-    interface NetworkConfig {
-      chainId: string
-      chainName: string
-      nativeCurrency: { name: string; symbol: string; decimals: number }
-      rpcUrls: string[]
-      blockExplorerUrls: string[]
-    }
-
-    const networkConfigs: Record<number, NetworkConfig> = {
-      11155111: { // Sepolia
-        chainId: '0xaa36a7',
-        chainName: 'Sepolia Testnet',
-        nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://sepolia.infura.io/v3/'],
-        blockExplorerUrls: ['https://sepolia.etherscan.io']
-      },
-      1: { // Mainnet
-        chainId: '0x1',
-        chainName: 'Ethereum Mainnet',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [
-          'https://eth.llamarpc.com',
-          'https://ethereum-rpc.publicnode.com',
-          'https://rpc.mevblocker.io',
-          'https://0xrpc.io/eth',
-          'https://eth1.lava.build',
-          'https://eth.blockrazor.xyz',
-          'https://eth-mainnet.public.blastapi.io'
-        ],
-        blockExplorerUrls: ['https://etherscan.io']
-      },
-      8453: { // Base
-        chainId: '0x2105',
-        chainName: 'Base',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: [
-          'https://base.llamarpc.com',
-          'https://base-rpc.publicnode.com',
-          'https://base.drpc.org',
-          'https://mainnet.base.org',
-          'https://base-mainnet.public.blastapi.io',
-          'https://1rpc.io/base',
-          'https://base-mainnet.gateway.tatum.io'
-        ],
-        blockExplorerUrls: ['https://basescan.org']
-      },
-      42161: { // Arbitrum One
-        chainId: '0xa4b1',
-        chainName: 'Arbitrum One',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://arb1.arbitrum.io/rpc'],
-        blockExplorerUrls: ['https://arbiscan.io']
-      },
-      10: { // Optimism
-        chainId: '0xa',
-        chainName: 'Optimism',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://mainnet.optimism.io'],
-        blockExplorerUrls: ['https://optimistic.etherscan.io']
-      },
-      137: { // Polygon
-        chainId: '0x89',
-        chainName: 'Polygon',
-        nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-        rpcUrls: ['https://polygon-rpc.com'],
-        blockExplorerUrls: ['https://polygonscan.com']
-      }
-    }
-
-    const config = networkConfigs[chainId]
-    if (!config) {
-      throw new Error(`Network configuration for chain ID ${chainId} not found`)
-    }
-
-    if (!window.ethereum) {
-      throw new Error('No Ethereum provider found')
-    }
-
-    await window.ethereum.request({
-      method: 'wallet_addEthereumChain',
-      params: [config],
-    })
-  }
-
-  // Connect wallet
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast.error('Please install MetaMask or another Web3 wallet')
-      return
-    }
-
-    setLoadingContract(true)
-    try {
-      const provider = new BrowserProvider(window.ethereum)
-
-      // Request account access
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-
-      const network = await provider.getNetwork()
-      if (Number(network.chainId) !== CHAIN_ID) {
-        // Automatically request network switch
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${CHAIN_ID.toString(16)}` }],
-          })
-          toast.success(`Switched to chain ID ${CHAIN_ID}`)
-          // Refresh provider after network switch
-          const newProvider = new BrowserProvider(window.ethereum)
-          const newSigner = await newProvider.getSigner()
-          const address = await newSigner.getAddress()
-
-          setAccount(address)
-
-          // Initialize contract with new provider
-          const contractInstance = new ManifestoContract(newProvider, CONTRACT_ADDRESS, newSigner)
-          setContract(contractInstance)
-
-          // Load contract metadata
-          const meta = await contractInstance.getMetadata()
-          setMetadata(meta)
-
-          // Load pledge status
-          const status = await contractInstance.getPledgeStatus(address)
-          setPledgeStatus(status)
-
-          toast.success('Wallet connected')
-          setLoadingContract(false)
-          return
-        } catch (switchError) {
-          // Network switch failed or was rejected
-          const errorCode = switchError && typeof switchError === 'object' && 'code' in switchError ? switchError.code : null
-          if (errorCode === 4902) {
-            // Chain not added to wallet, try to add it
-            try {
-              await addNetworkToWallet(CHAIN_ID)
-              toast.info('Network added! Please try connecting again.')
-            } catch {
-              toast.error(`Please manually add chain ID ${CHAIN_ID} to your wallet`)
-            }
-          } else {
-            toast.error(`Please switch to chain ID ${CHAIN_ID} in your wallet`)
-          }
-          setLoadingContract(false)
-          return
-        }
-      }
-
-      const signer = await provider.getSigner()
-      const address = await signer.getAddress()
-
-      setAccount(address)
-
-      // Initialize contract
-      const contractInstance = new ManifestoContract(provider, CONTRACT_ADDRESS, signer)
-      setContract(contractInstance)
-
-      // Load contract metadata
-      const meta = await contractInstance.getMetadata()
-      setMetadata(meta)
-
-      // Load pledge status
-      const status = await contractInstance.getPledgeStatus(address)
-      setPledgeStatus(status)
-
-      toast.success('Wallet connected')
-    } catch (error) {
-      console.error('Error connecting wallet:', error)
-      const errorMsg = error instanceof Error ? error.message : 'Failed to connect wallet'
-      toast.error(errorMsg)
-    } finally {
-      setLoadingContract(false)
-    }
-  }
-
   // Sign the manifesto
   const handleSign = async () => {
     if (!contract || !account) {
@@ -695,7 +554,7 @@ function App() {
 
           {/* Manifesto Text */}
           <div className="px-4 sm:px-6">
-            <ManifestoDisplay metadata={metadata} loading={loadingContract && !metadata} darkMode={darkMode} />
+            <ManifestoDisplay metadata={metadata} loading={!metadata} darkMode={darkMode} />
           </div>
 
           {/* Cards below manifesto */}
@@ -723,7 +582,6 @@ function App() {
               <SignatureButton
                 pledgeStatus={pledgeStatus}
                 onSign={handleSign}
-                onConnect={connectWallet}
                 loading={pledging}
                 connected={!!account}
               />
