@@ -9,9 +9,10 @@ interface AddressCheckerProps {
     treeIndex?: number
   } | null>
   onResolveENS: (ensName: string) => Promise<string | null>
+  darkMode?: boolean
 }
 
-export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
+export function AddressChecker({ onCheck, onResolveENS, darkMode = false }: AddressCheckerProps) {
   const [input, setInput] = useState('')
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<{
@@ -98,19 +99,19 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
   }
 
   return (
-    <div className="bg-white/40 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-[#D4C4AC] p-6 sm:p-8">
-      <h3 className="text-xl sm:text-2xl font-medium text-gray-900 mb-3 sm:mb-4 text-center" style={{ lineHeight: '1.1em' }}>
+    <div className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#3a3025]/40 border-[#4a4035]/60' : 'bg-[#e5c9b3] border-[#d4b89f]'}`}>
+      <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#e8d4b8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
         🔍 Check Address Status
       </h3>
 
-      <p className="text-center text-gray-800 mb-6 sm:mb-8 text-sm sm:text-base font-normal px-2" style={{ lineHeight: '1.5em' }}>
+      <p className={`text-center mb-5 sm:mb-6 text-xs sm:text-sm font-normal px-2 ${darkMode ? 'text-[#d8c4a8]' : 'text-gray-800'}`} style={{ lineHeight: '1.5em' }}>
         Verify if an address or ENS name has signed the manifesto.
       </p>
 
-      <div className="space-y-4 sm:space-y-5">
+      <div className="space-y-3 sm:space-y-4">
         {/* Input */}
         <div>
-          <label htmlFor="address" className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
+          <label htmlFor="address" className={`block text-xs font-medium mb-2 ${darkMode ? 'text-[#c4a57b]' : 'text-gray-700'}`}>
             Ethereum Address or ENS Name
           </label>
           <input
@@ -119,7 +120,7 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="0x... or vitalik.eth"
-            className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-[#D4C4AC] bg-white/60 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-xs sm:text-sm"
+            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-xs ${darkMode ? 'bg-[#2a2520]/60 border-[#4a4035] text-[#e8d4b8] placeholder-[#8b7355]' : 'bg-white/60 border-[#d4b89f] text-gray-900'}`}
             onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
           />
         </div>
@@ -145,10 +146,10 @@ export function AddressChecker({ onCheck, onResolveENS }: AddressCheckerProps) {
 
         {/* Result */}
         {result && (
-          <div className={`p-4 sm:p-5 rounded-lg sm:rounded-xl border ${
+          <div className={`p-3 sm:p-4 rounded-lg border ${
             result.hasPledged
-              ? 'bg-white/60 border-green-700/30'
-              : 'bg-white/40 border-[#D4C4AC]'
+              ? darkMode ? 'bg-[#2a2520]/60 border-green-600/50' : 'bg-white/50 border-green-700/40'
+              : darkMode ? 'bg-[#2a2520]/60 border-[#4a4035]' : 'bg-white/40 border-[#d4b89f]'
           }`}>
             <div className="flex items-start gap-2 sm:gap-3">
               {result.hasPledged ? (

@@ -110,7 +110,7 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
 export function ManifestoDisplay({ metadata, loading, darkMode = false }: ManifestoDisplayProps) {
   if (loading) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-4 sm:p-6 md:p-10 shadow-2xl mx-auto w-full max-w-[590px]">
+      <div className="relative p-4 sm:p-6 md:p-10 mx-auto w-full max-w-[590px]">
         <div className="animate-pulse">
           <div className="h-10 bg-[#c4a57b]/30 rounded w-3/4 mx-auto mb-4"></div>
           <div className="h-4 bg-[#c4a57b]/30 rounded w-1/2 mx-auto mb-8"></div>
@@ -126,81 +126,55 @@ export function ManifestoDisplay({ metadata, loading, darkMode = false }: Manife
 
   if (!metadata) {
     return (
-      <div className="relative bg-gradient-to-br from-[#f5e6d3] via-[#f0ddc0] to-[#e8d4b8] rounded-2xl border-2 border-[#c4a57b] p-4 sm:p-6 md:p-10 shadow-2xl mx-auto w-full max-w-[590px]">
+      <div className="relative p-4 sm:p-6 md:p-10 mx-auto w-full max-w-[590px]">
         <p className="text-center font-light" style={{ color: '#3a2f1f' }}>Loading manifesto...</p>
       </div>
     )
   }
 
-  const bgColors = darkMode
-    ? 'bg-gradient-to-br from-[#2a2520]/90 via-[#3a3530]/85 to-[#4a4540]/90'
-    : 'bg-gradient-to-br from-[#f5e6d3]/90 via-[#f0ddc0]/85 to-[#e8d4b8]/90'
-
-  const borderColor = darkMode ? 'border-[#6a6560]' : 'border-[#c4a57b]'
-
   const { title, content } = parseManifestoText(metadata.manifestoText, darkMode)
 
   return (
-    <div className={`relative ${bgColors} rounded-2xl border-2 ${borderColor} p-4 sm:p-6 md:p-10 shadow-2xl transition-colors duration-300 mx-auto overflow-hidden w-full max-w-[590px]`}
-         style={{
-           boxShadow: darkMode
-             ? 'inset 0 2px 4px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.5)'
-             : 'inset 0 2px 4px rgba(0,0,0,0.06), 0 10px 30px rgba(0,0,0,0.15)',
-           backgroundImage: `
-             repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(139,115,85,0.03) 2px, rgba(139,115,85,0.03) 4px),
-             repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139,115,85,0.03) 2px, rgba(139,115,85,0.03) 4px),
-             radial-gradient(ellipse at top left, rgba(255,255,255,${darkMode ? '0.05' : '0.3'}), transparent 40%),
-             radial-gradient(ellipse at bottom right, rgba(139,115,85,${darkMode ? '0.3' : '0.15'}), transparent 40%)
-           `
-         }}>
-      {/* Aged paper texture overlay - full container */}
-      <div className="absolute inset-0 rounded-2xl opacity-20 pointer-events-none"
+    <div className="relative mx-auto w-full max-w-[590px] transition-colors duration-300">
+      {/* Old paper texture background with subtle aging */}
+      <div className="absolute inset-0 pointer-events-none opacity-40"
            style={{
-             backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E")`,
+             backgroundImage: `url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23noise)' opacity='0.25'/%3E%3C/svg%3E")`,
              mixBlendMode: 'multiply'
            }}></div>
 
-      {/* Burn/fade edges effect - full container */}
-      <div className="absolute inset-0 rounded-2xl pointer-events-none"
+      {/* Subtle vignette/aged edges */}
+      <div className="absolute inset-0 pointer-events-none"
            style={{
-             boxShadow: 'inset 0 0 60px rgba(139,115,85,0.2), inset 0 0 20px rgba(139,115,85,0.1)'
+             background: darkMode
+               ? 'radial-gradient(ellipse 120% 100% at center, transparent 60%, rgba(26,20,16,0.4) 100%)'
+               : 'radial-gradient(ellipse 120% 100% at center, transparent 60%, rgba(139,115,85,0.15) 100%)'
            }}></div>
 
-      {/* Title Section (without background) */}
-      <div className="relative z-10">
-        {title}
-      </div>
-
-      {/* Content Section (with Vitruvian Man background between the two lines) */}
-      <div className="relative overflow-hidden">
-        {/* Vitruvian Man background image - fills height between the two lines */}
-        <div className="absolute inset-0 pointer-events-none"
-             style={{
-               backgroundImage: 'url(/background.png)',
-               backgroundSize: 'auto 100%',
-               backgroundPosition: 'center top',
-               backgroundRepeat: 'no-repeat',
-               opacity: darkMode ? 0.15 : 0.4,
-               mixBlendMode: darkMode ? 'lighten' : 'normal',
-               transition: 'opacity 300ms, mix-blend-mode 300ms'
-             }}></div>
-
-        <div className="relative z-10" style={{
-          fontSize: '1.125rem',
-          textShadow: darkMode ? '0 1px 1px rgba(0,0,0,0.3)' : '0 1px 1px rgba(255,255,255,0.3)'
-        }}>
-          {content}
+      <div className="relative z-10 py-6 sm:py-8 md:py-12">
+        {/* Title Section */}
+        <div className="mb-8">
+          {title}
         </div>
-      </div>
 
-      {/* Decorative footer with old manuscript style */}
-      <div className="mt-12 pt-8 border-t-2 text-center relative z-10" style={{ borderColor: '#8b7355' }}>
-        <div style={{
-          fontFamily: "'EB Garamond', serif",
-          color: '#8b7355',
-          fontSize: '1.25rem',
-          letterSpacing: '0.5em'
-        }}>✦ ✦ ✦</div>
+        {/* Content Section with Vitruvian Man background */}
+        <div className="relative overflow-hidden">
+          {/* Vitruvian Man background - fills height between the lines */}
+          <div className="absolute inset-0 pointer-events-none"
+               style={{
+                 backgroundImage: 'url(/background.png)',
+                 backgroundSize: 'auto 100%',
+                 backgroundPosition: 'center top',
+                 backgroundRepeat: 'no-repeat',
+                 opacity: darkMode ? 0.12 : 0.35,
+                 mixBlendMode: darkMode ? 'lighten' : 'multiply',
+                 transition: 'opacity 300ms, mix-blend-mode 300ms'
+               }}></div>
+
+          <div className="relative z-10 pl-4 sm:pl-6 md:pl-8">
+            {content}
+          </div>
+        </div>
       </div>
     </div>
   )
