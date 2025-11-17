@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BrowserProvider, JsonRpcProvider, Wallet, getAddress } from 'ethers'
+import { BrowserProvider, JsonRpcProvider, Wallet, getAddress, toUtf8String } from 'ethers'
 import { toast, Toaster } from 'sonner'
 import { ManifestoContract } from '~/lib/manifesto-contract'
 import { initSubgraphClient, getSigner } from '~/lib/subgraph-client'
@@ -14,19 +14,11 @@ const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 42220)
 const SUBGRAPH_ENDPOINT = (import.meta.env.VITE_SUBGRAPH_ENDPOINT || '').trim()
 const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://celoscan.io'
 
-const SELF_SCOPE = import.meta.env.VITE_SELF_SCOPE || 'manifesto-v1'
 const SELF_ENDPOINT_TYPE = import.meta.env.VITE_SELF_ENDPOINT_TYPE || 'celo'
 const SELF_APP_NAME = import.meta.env.VITE_SELF_APP_NAME || 'Self Manifesto'
 const SELF_LOGO_URL = import.meta.env.VITE_SELF_LOGO_URL || '/self-logo.png'
-const SELF_MIN_AGE = Number(import.meta.env.VITE_SELF_MIN_AGE || 16)
-const SELF_OFAC_ENABLED = (import.meta.env.VITE_SELF_OFAC || 'false').toLowerCase() === 'true'
-const SELF_EXCLUDED_COUNTRIES = (import.meta.env.VITE_SELF_EXCLUDED_COUNTRIES || '')
-  .split(',')
-  .map((code: string) => code.trim().toUpperCase())
-  .filter((code: string) => code.length === 3)
 const SELF_DEEPLINK_CALLBACK = import.meta.env.VITE_SELF_DEEPLINK_CALLBACK || ''
-const SELF_USER_DATA = import.meta.env.VITE_SELF_USER_DATA || 'manifesto:v1'
-const SELF_REQUIRED_NATIONALITY = (import.meta.env.VITE_SELF_REQUIRED_NATIONALITY || '').toUpperCase()
+const SELF_USER_DATA = import.meta.env.VITE_SELF_USER_DATA || 'manifesto:clean-streets'
 const DEBUG_LOGS = (import.meta.env.VITE_DEBUG_LOGS || 'false').toLowerCase() === 'true'
 const debugLog = (...args: unknown[]) => {
   if (DEBUG_LOGS) {
@@ -48,6 +40,15 @@ type LocalWalletInfo = {
   address: string
   mnemonic: string
   privateKey: string
+}
+
+type VerificationPolicyState = {
+  minAge: number
+  minAgeEnabled: boolean
+  ofacEnabled: boolean
+  excludedCountries: string[]
+  requiredNationality: string
+  attestationIds: string[]
 }
 
 const STATUS_COPY: Record<string, string> = {
@@ -88,6 +89,8 @@ export default function App() {
     return saved ? JSON.parse(saved) : false
   })
   const [account, setAccount] = useState<string | null>(null)
+  const [verificationPolicy, setVerificationPolicy] = useState<VerificationPolicyState | null>(null)
+  const [scopeSeed, setScopeSeed] = useState('')
 
   const rpcProviders = useMemo(
     () => RPC_FALLBACKS.map((rpc) => ({ rpc, provider: new JsonRpcProvider(rpc) })),
@@ -189,11 +192,50 @@ export default function App() {
     loadManifestoMetadata()
     debugLog('App bootstrap', {
       contract: CONTRACT_ADDRESS,
-      scope: SELF_SCOPE,
       endpointType: SELF_ENDPOINT_TYPE,
       subgraph: SUBGRAPH_ENDPOINT,
       rpcFallbacks: RPC_FALLBACKS
     })
+  }, [])
+
+  useEffect(() => {
+    const loadPolicy = async () => {
+      for (const rpc of RPC_FALLBACKS) {
+        try {
+          const provider = new JsonRpcProvider(rpc)
+          const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
+          const params = await readOnlyContract.getVerificationParameters()
+          const scopeLabel = await readOnlyContract.getScopeLabel()
+          const nationalityHex = params.requiredNationalityHex as string
+          const nationality =
+            nationalityHex === '0x000000'
+              ? ''
+              : toUtf8String(nationalityHex).split('\u0000').join('').toUpperCase()
+
+          setVerificationPolicy({
+            minAge: params.minAge,
+            minAgeEnabled: params.minAgeEnabled,
+            ofacEnabled: params.ofacEnabled,
+            excludedCountries: params.forbiddenCountries,
+            requiredNationality: nationality,
+            attestationIds: params.attestationIds
+          })
+
+          if (scopeLabel && scopeLabel.length > 0) {
+            setScopeSeed(scopeLabel)
+          } else {
+            debugLog('Scope label missing on contract; waiting...', { rpc })
+          }
+
+          debugLog('Loaded verification policy from chain', { params, scopeLabel, rpc })
+          return
+        } catch (error) {
+          console.warn(`Policy load failed from ${rpc}:`, error)
+        }
+      }
+    }
+
+    loadPolicy()
   }, [])
 
   useEffect(() => {
@@ -203,6 +245,15 @@ export default function App() {
       setUniversalLink('')
       setSelfStatus('idle')
       setSelfError(null)
+      return
+    }
+
+    if (!verificationPolicy || !scopeSeed) {
+      debugLog('Waiting for verification policy or scope', {
+        hasPolicy: !!verificationPolicy,
+        scopeSeed,
+        selectedAddress
+      })
       return
     }
 
@@ -228,25 +279,25 @@ export default function App() {
     try {
       const endpointType = (SELF_ENDPOINT_TYPE as EndpointType) || 'celo'
       const disclosures: Record<string, unknown> = {
-        minimumAge: SELF_MIN_AGE,
+        minimumAge: verificationPolicy.minAgeEnabled ? verificationPolicy.minAge : undefined,
         nationality: true,
         date_of_birth: true,
-        ofac: SELF_OFAC_ENABLED
+        ofac: verificationPolicy.ofacEnabled
       }
-      if (SELF_EXCLUDED_COUNTRIES.length) {
-        disclosures.excludedCountries = SELF_EXCLUDED_COUNTRIES
+      if (verificationPolicy.excludedCountries.length) {
+        disclosures.excludedCountries = verificationPolicy.excludedCountries
       }
 
       debugLog('Building Self app payload', {
         selectedAddress,
         endpointType,
-        scope: SELF_SCOPE,
+        scope: scopeSeed,
         disclosures
       })
 
       const app = buildSelfApp({
         appName: SELF_APP_NAME,
-        scope: SELF_SCOPE,
+        scope: scopeSeed,
         endpoint: CONTRACT_ADDRESS.toLowerCase(),
         endpointType,
         userIdType: 'hex',
@@ -266,7 +317,7 @@ export default function App() {
       setSelfStatus('error')
       setSelfError('We could not prepare the QR code. Please reload and try again.')
     }
-  }, [selectedAddress, fetchPledgeStatus])
+  }, [selectedAddress, fetchPledgeStatus, verificationPolicy, scopeSeed])
 
   async function loadManifestoMetadata() {
     const cacheKey = `manifesto_metadata_${CONTRACT_ADDRESS}`
@@ -416,18 +467,26 @@ export default function App() {
   }
 
   const selectedAlreadySigned = selectedStatus?.hasPledged
-  const requirementItems: string[] = [`Be at least ${SELF_MIN_AGE} years old.`]
+  const requirementItems: string[] = []
 
-  if (SELF_REQUIRED_NATIONALITY) {
-    requirementItems.push(`Use a passport issued by ${SELF_REQUIRED_NATIONALITY}.`)
-  } else if (SELF_EXCLUDED_COUNTRIES.length) {
-    requirementItems.push(`The following countries are excluded: ${SELF_EXCLUDED_COUNTRIES.join(', ')}.`)
+  if (verificationPolicy) {
+    if (verificationPolicy.minAgeEnabled && verificationPolicy.minAge > 0) {
+      requirementItems.push(`Be at least ${verificationPolicy.minAge} years old.`)
+    }
+
+    if (verificationPolicy.requiredNationality) {
+      requirementItems.push(`Use a passport issued by ${verificationPolicy.requiredNationality}.`)
+    } else if (verificationPolicy.excludedCountries.length) {
+      requirementItems.push(`The following countries are excluded: ${verificationPolicy.excludedCountries.join(', ')}.`)
+    } else {
+      requirementItems.push('Passports from any supported country are welcome.')
+    }
+
+    if (verificationPolicy.ofacEnabled) {
+      requirementItems.push('Individuals on the OFAC sanctions list cannot participate.')
+    }
   } else {
-    requirementItems.push('Passports from any supported country are welcome.')
-  }
-
-  if (SELF_OFAC_ENABLED) {
-    requirementItems.push('Individuals on the OFAC sanctions list cannot participate.')
+    requirementItems.push('Self will verify your eligibility directly on your device.')
   }
 
   return (

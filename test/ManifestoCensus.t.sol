@@ -176,6 +176,26 @@ contract ManifestoCensusTest is Test {
         assertTrue(bytes(manifesto).length > 100, "Manifesto text should exist");
     }
 
+    function test_VerificationParametersGetter() public view {
+        (
+            uint256 minAge,
+            bool minAgeEnabled,
+            bool ofacEnabled,
+            string[] memory forbiddenCountries,
+            bytes3 nationality,
+            bytes32[] memory attestationIds
+        ) = census.getVerificationParameters();
+
+        assertEq(minAge, 16);
+        assertTrue(minAgeEnabled);
+        assertFalse(ofacEnabled);
+        assertEq(forbiddenCountries.length, 0);
+        assertEq(uint24(nationality), 0);
+        assertEq(attestationIds.length, 1);
+        assertEq(attestationIds[0], AttestationId.E_PASSPORT);
+        assertEq(keccak256(bytes(census.scopeLabel())), keccak256(bytes("manifesto-test")));
+    }
+
     function test_InitialState() public view {
         assertEq(census.pledgeCount(), 0, "Initial pledge count should be 0");
         assertFalse(census.hasPledged(alice), "Alice should not have pledged");

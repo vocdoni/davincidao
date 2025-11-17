@@ -10,9 +10,9 @@ dataSources:
     name: ManifestoCensus
     network: celo
     source:
-      address: "0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61"
+      address: "0x80603971AE1097fB9A5c0aEd6f3fcCE5d42EF578"
       abi: ManifestoCensus
-      startBlock: 51479999
+      startBlock: 51489323
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

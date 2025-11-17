@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Test script for the Self Manifesto subgraph
-SUBGRAPH_URL="https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2"
+SUBGRAPH_URL="https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.4"
 
-echo "🧪 Testing subgraph: self-manifesto (v0.0.2)"
+echo "🧪 Testing subgraph: self-manifesto (v0.0.4)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 

@@ -90,7 +90,7 @@ contract DeployManifestoCensus is Script {
 
     function _loadSettings() internal returns (DeploymentSettings memory settings) {
         settings.hubAddress = vm.envOr("SELF_HUB_V2", CELO_MAINNET_HUB_V2);
-        settings.scopeSeed = vm.envOr("SELF_SCOPE_SEED", string("manifesto-v1"));
+        settings.scopeSeed = vm.envOr("SELF_SCOPE_SEED", string("manifesto-clean-streets"));
         settings.minAge = vm.envOr("SELF_MIN_AGE", uint256(16));
         settings.ofacEnabled = vm.envOr("SELF_OFAC_ENABLED", false);
         settings.forbiddenCsv = vm.envOr("SELF_FORBIDDEN_COUNTRIES", string(""));

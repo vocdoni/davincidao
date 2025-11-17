@@ -6,7 +6,7 @@ Trustless registry of manifesto signers gated by Self zk verification. Each depl
 
 | Manifesto | Network | Contract | Start Block | Self Scope | Verification Config | Subgraph |
 | --- | --- | --- | --- | --- | --- | --- |
-| Civic Alliance for Streets Without Dog Shit | Celo mainnet | `0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61` | `51479999` | `manifesto-clean-streets` | `0xc8de7aa840ecfaccfedf1f7f3517006c1b90e192ab00cc8733b56fdbadbefbde` | `https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2` |
+| Civic Alliance for Streets Without Dog Shit | Celo mainnet | `0x80603971AE1097fB9A5c0aEd6f3fcCE5d42EF578` | `51489323` | `manifesto-clean-streets` | `0xc8de7aa840ecfaccfedf1f7f3517006c1b90e192ab00cc8733b56fdbadbefbde` | `https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.3` |
 | Collective Freedom (legacy) | Celo mainnet | `0x28640CE15B4C2B7BF847F81c01F952ef538578E8` | `51471863` | `manifesto-v1` | `0xc8de7aa840ecfaccfedf1f7f3517006c1b90e192ab00cc8733b56fdbadbefbde` | `https://api.studio.thegraph.com/query/1704875/self-manifesto/v0` |
 
 `deployments/manifesto/deploy.sol` reads metadata from files in `manifests/`. Define new campaigns by providing:
@@ -68,7 +68,7 @@ GRAPH_ACCESS_TOKEN=<deploy-key> \
 graph deploy self-manifesto \
   --node https://api.studio.thegraph.com/deploy/ \
   --ipfs https://api.thegraph.com/ipfs/ \
-  --version-label v0.0.2 \
+  --version-label v0.0.3 \
   --skip-migrations
 ```
 
@@ -82,14 +82,13 @@ pnpm install
 
 # Update webapp/.env with your deployment coordinates, e.g.
 cat > webapp/.env <<'EOF'
-VITE_CONTRACT_ADDRESS=0xA3e3d9570caEf34b8cbe5a206ff3bB3793985a61
+VITE_CONTRACT_ADDRESS=0x80603971AE1097fB9A5c0aEd6f3fcCE5d42EF578
 VITE_RPC_URL=https://forno.celo.org
 VITE_CHAIN_ID=42220
-VITE_SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.2
+VITE_SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/1704875/self-manifesto/v0.0.3
 VITE_BLOCK_EXPLORER_URL=https://celoscan.io
-VITE_SELF_SCOPE=manifesto-clean-streets
+VITE_SELF_ENDPOINT_TYPE=celo
 VITE_SELF_APP_NAME=Self Manifesto
-VITE_SELF_MIN_AGE=16
 VITE_SELF_USER_DATA=manifesto:clean-streets
 EOF
 

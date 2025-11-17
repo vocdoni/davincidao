@@ -58,6 +58,13 @@ contract ManifestoCensus is ICensusValidator, SelfVerificationRoot {
 
     /// @notice Allowed document types (attestation identifiers)
     mapping(bytes32 => bool) public allowedAttestation;
+    bytes32[] private _attestationAllowListValues;
+
+    /// @notice Stores forbidden country codes for inspection
+    string[] private _forbiddenCountries;
+
+    /// @notice Human-readable scope string used during deployment
+    string public scopeLabel;
 
     /// @notice Optional nationality restriction (ISO Alpha-3 uppercase)
     bytes3 public requiredNationality;
@@ -102,13 +109,22 @@ contract ManifestoCensus is ICensusValidator, SelfVerificationRoot {
         // Initialize circular buffer with capacity for 100 recent roots
         _rootBuffer.setup(100);
 
+        scopeLabel = scopeSeed;
         verificationConfig = SelfUtils.formatVerificationConfigV2(unformattedVerificationConfig);
         verificationConfigId = IIdentityVerificationHubV2(identityVerificationHubV2Address).setVerificationConfigV2(
             verificationConfig
         );
 
         for (uint256 i = 0; i < attestationAllowList.length; i++) {
-            allowedAttestation[attestationAllowList[i]] = true;
+            bytes32 attestationId = attestationAllowList[i];
+            allowedAttestation[attestationId] = true;
+            _attestationAllowListValues.push(attestationId);
+        }
+
+        if (unformattedVerificationConfig.forbiddenCountries.length > 0) {
+            for (uint256 i = 0; i < unformattedVerificationConfig.forbiddenCountries.length; i++) {
+                _forbiddenCountries.push(unformattedVerificationConfig.forbiddenCountries[i]);
+            }
         }
 
         if (bytes(requiredNationalityInput).length == 0) {
@@ -179,6 +195,36 @@ contract ManifestoCensus is ICensusValidator, SelfVerificationRoot {
     /// @notice Exposes the hub address for off-chain tooling
     function identityVerificationHub() external view returns (address) {
         return address(_identityVerificationHubV2);
+    }
+
+    /// @notice Returns the verification rules enforced by this deployment
+    function getVerificationParameters()
+        external
+        view
+        returns (
+            uint256 minAge,
+            bool minAgeEnabled,
+            bool ofacEnabled,
+            string[] memory forbiddenCountries,
+            bytes3 nationality,
+            bytes32[] memory attestationTypes
+        )
+    {
+        SelfStructs.VerificationConfigV2 memory config = verificationConfig;
+        minAge = config.olderThan;
+        minAgeEnabled = config.olderThanEnabled;
+        ofacEnabled = config.ofacEnabled[0];
+        nationality = requiredNationality;
+
+        forbiddenCountries = new string[](_forbiddenCountries.length);
+        for (uint256 i = 0; i < _forbiddenCountries.length; i++) {
+            forbiddenCountries[i] = _forbiddenCountries[i];
+        }
+
+        attestationTypes = new bytes32[](_attestationAllowListValues.length);
+        for (uint256 i = 0; i < _attestationAllowListValues.length; i++) {
+            attestationTypes[i] = _attestationAllowListValues[i];
+        }
     }
 
     // ========= Self Integration Overrides =========

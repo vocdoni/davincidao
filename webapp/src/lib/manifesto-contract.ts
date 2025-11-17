@@ -17,6 +17,8 @@ const MANIFESTO_ABI = [
   'function getCensusRoot() view returns (uint256)',
   'function getRootBlockNumber(uint256) view returns (uint256)',
   'function computeLeaf(address) pure returns (uint256)',
+  'function getVerificationParameters() view returns (uint256,bool,bool,string[],bytes3,bytes32[])',
+  'function scopeLabel() view returns (string)',
 
   // Write functions
   'function pledge()'
@@ -39,6 +41,15 @@ export interface CensusInfo {
   root: string
   totalPledges: number
   blockNumber?: number
+}
+
+export interface VerificationParameters {
+  minAge: number
+  minAgeEnabled: boolean
+  ofacEnabled: boolean
+  forbiddenCountries: string[]
+  requiredNationalityHex: string
+  attestationIds: string[]
 }
 
 export class ManifestoContract {
@@ -167,6 +178,40 @@ export class ManifestoContract {
   async computeLeaf(address: string): Promise<string> {
     const leaf = await this.contract.computeLeaf(address)
     return leaf.toString()
+  }
+
+  /**
+   * Load verification parameters (min age, OFAC, nationality, etc.)
+   */
+  async getVerificationParameters(): Promise<VerificationParameters> {
+    const [
+      minAge,
+      minAgeEnabled,
+      ofacEnabled,
+      forbiddenCountries,
+      requiredNationality,
+      attestationIds
+    ] = await this.contract.getVerificationParameters()
+
+    return {
+      minAge: Number(minAge),
+      minAgeEnabled,
+      ofacEnabled,
+      forbiddenCountries,
+      requiredNationalityHex: requiredNationality,
+      attestationIds: attestationIds.map((value: string) => value)
+    }
+  }
+
+  /**
+   * Read the human-readable scope seed set at deployment
+   */
+  async getScopeLabel(): Promise<string> {
+    try {
+      return await this.contract.scopeLabel()
+    } catch {
+      return ''
+    }
   }
 
   /**
