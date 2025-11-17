@@ -14,7 +14,6 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
   const contentElements: JSX.Element[] = []
   let currentParagraph: string[] = []
   let elementIndex = 0
-  let titleFound = false
 
   const flushParagraph = () => {
     if (currentParagraph.length > 0) {
@@ -74,7 +73,6 @@ function parseManifestoText(text: string, darkMode: boolean = false) {
           <div className="mb-6 border-b-2" style={{ borderColor: '#8b7355' }}></div>
         </div>
       )
-      titleFound = true
     }
     // Handle subheaders (lines starting with ##)
     else if (line.startsWith('## ')) {
