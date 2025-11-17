@@ -112,7 +112,14 @@ export default function App() {
   const [showRecovery, setShowRecovery] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('manifesto-dark-mode')
-    return saved ? JSON.parse(saved) : false
+    if (saved) {
+      return JSON.parse(saved)
+    }
+    // Check system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true
+    }
+    return false
   })
   const [verificationPolicy, setVerificationPolicy] = useState<VerificationPolicyState | null>(null)
   const [scopeSeed, setScopeSeed] = useState('')
@@ -222,6 +229,13 @@ export default function App() {
   }, [rpcProviders])
 
   useEffect(() => {
+    // Apply dark mode class to document root
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    // Save to localStorage
     localStorage.setItem('manifesto-dark-mode', JSON.stringify(darkMode))
   }, [darkMode])
 
