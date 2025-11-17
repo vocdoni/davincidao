@@ -27,6 +27,12 @@ const SELF_EXCLUDED_COUNTRIES = (import.meta.env.VITE_SELF_EXCLUDED_COUNTRIES ||
 const SELF_DEEPLINK_CALLBACK = import.meta.env.VITE_SELF_DEEPLINK_CALLBACK || ''
 const SELF_USER_DATA = import.meta.env.VITE_SELF_USER_DATA || 'manifesto:v1'
 const SELF_REQUIRED_NATIONALITY = (import.meta.env.VITE_SELF_REQUIRED_NATIONALITY || '').toUpperCase()
+const DEBUG_LOGS = (import.meta.env.VITE_DEBUG_LOGS || 'false').toLowerCase() === 'true'
+const debugLog = (...args: unknown[]) => {
+  if (DEBUG_LOGS) {
+    console.debug('[ManifestoApp]', ...args)
+  }
+}
 
 const RPC_FALLBACKS = Array.from(new Set([
   RPC_URL,
@@ -93,6 +99,7 @@ export default function App() {
 
     for (const { rpc, provider } of rpcProviders) {
       try {
+        debugLog('Checking pledge status via RPC', { address, rpc })
         const readContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
         baseStatus = await readContract.getPledgeStatus(address)
         break
@@ -102,6 +109,7 @@ export default function App() {
     }
 
     if (!baseStatus) {
+      debugLog('All RPC endpoints failed for pledge status', address)
       throw new Error('All RPC endpoints failed to respond')
     }
 
@@ -109,6 +117,7 @@ export default function App() {
       try {
         const signerData = await getSigner(address)
         if (signerData) {
+          debugLog('Subgraph signer data', signerData)
           baseStatus = {
             ...baseStatus,
             treeIndex: parseInt(signerData.treeIndex),
@@ -156,6 +165,7 @@ export default function App() {
     if (generatedWallet && !selectedAddress) {
       setSelectedAddress(generatedWallet.address)
       setSelectedLabel('Auto-generated wallet')
+      debugLog('Auto wallet selected on mount', generatedWallet.address)
     }
   }, [generatedWallet, selectedAddress])
 
@@ -168,6 +178,7 @@ export default function App() {
   useEffect(() => {
     if (SUBGRAPH_ENDPOINT) {
       initSubgraphClient(SUBGRAPH_ENDPOINT)
+      debugLog('Initialized subgraph client', SUBGRAPH_ENDPOINT)
     }
     loadCensusData()
     const interval = setInterval(() => loadCensusData(), 15000)
@@ -176,6 +187,13 @@ export default function App() {
 
   useEffect(() => {
     loadManifestoMetadata()
+    debugLog('App bootstrap', {
+      contract: CONTRACT_ADDRESS,
+      scope: SELF_SCOPE,
+      endpointType: SELF_ENDPOINT_TYPE,
+      subgraph: SUBGRAPH_ENDPOINT,
+      rpcFallbacks: RPC_FALLBACKS
+    })
   }, [])
 
   useEffect(() => {
@@ -188,6 +206,7 @@ export default function App() {
       return
     }
 
+    debugLog('Selected address updated', selectedAddress)
     setSelfStatus('preparing')
     setSelfError(null)
 
@@ -195,6 +214,7 @@ export default function App() {
       try {
         const status = await fetchPledgeStatus(selectedAddress)
         setSelectedStatus(status)
+        debugLog('Fetched pledge status', { selectedAddress, status })
         if (status.hasPledged) {
           setSelfStatus('success')
         }
@@ -217,6 +237,13 @@ export default function App() {
         disclosures.excludedCountries = SELF_EXCLUDED_COUNTRIES
       }
 
+      debugLog('Building Self app payload', {
+        selectedAddress,
+        endpointType,
+        scope: SELF_SCOPE,
+        disclosures
+      })
+
       const app = buildSelfApp({
         appName: SELF_APP_NAME,
         scope: SELF_SCOPE,
@@ -231,6 +258,7 @@ export default function App() {
       })
 
       setSelfApp(app)
+      debugLog('Self app built', app)
       setUniversalLink(getUniversalLink(app))
       setSelfStatus((prev) => (prev === 'success' ? 'success' : 'awaiting'))
     } catch (error) {
@@ -246,7 +274,9 @@ export default function App() {
 
     if (cached) {
       try {
-        setMetadata(JSON.parse(cached))
+        const parsed = JSON.parse(cached)
+        setMetadata(parsed)
+        debugLog('Loaded manifesto metadata from cache', { title: parsed?.title })
         setInitialLoading(false)
         return
       } catch (error) {
@@ -261,6 +291,7 @@ export default function App() {
         const readOnlyContract = new ManifestoContract(provider, CONTRACT_ADDRESS)
         const meta = await readOnlyContract.getMetadata()
         setMetadata(meta)
+        debugLog('Loaded manifesto metadata from RPC', { rpc, title: meta.title })
         localStorage.setItem(cacheKey, JSON.stringify(meta))
         setInitialLoading(false)
         return
@@ -281,6 +312,7 @@ export default function App() {
         const info = await readOnlyContract.getCensusInfo()
         setCensusRoot(info.root)
         setTotalPledges(info.totalPledges)
+        debugLog('Loaded census info', { rpc, root: info.root, totalPledges: info.totalPledges })
         return
       } catch (error) {
         console.warn(`Census data load failed from ${rpc}:`, error)
@@ -318,6 +350,7 @@ export default function App() {
       setAccount(walletAddress)
       setSelectedAddress(getAddress(walletAddress))
       setSelectedLabel('Connected wallet')
+      debugLog('Wallet connected', { walletAddress, chainId: desiredChain })
       toast.success('Wallet connected successfully.')
     } catch (error) {
       console.error('Wallet connection failed:', error)
@@ -330,10 +363,12 @@ export default function App() {
     if (!selectedAddress) return
     setSelfStatus('verifying')
     setSelfError(null)
+    debugLog('Self verification success received', selectedAddress)
 
     try {
       const status = await waitForOnchainConfirmation(selectedAddress)
       setSelectedStatus(status)
+      debugLog('On-chain confirmation detected', status)
       setSelfStatus('success')
       loadCensusData()
       toast.success('Manifesto signed! Thank you for taking part.')
@@ -347,6 +382,7 @@ export default function App() {
   const waitForOnchainConfirmation = async (address: string) => {
     const maxAttempts = 20
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      debugLog('Polling for on-chain confirmation', { address, attempt })
       const status = await fetchPledgeStatus(address)
       if (status.hasPledged) {
         return status
@@ -372,6 +408,7 @@ export default function App() {
 
   const handleSelfError = (data?: { error_code?: string; reason?: string }) => {
     console.error('Self verification error:', data)
+    debugLog('Self verification error payload', data)
     setSelfStatus('error')
     const message = data?.reason || data?.error_code || 'Verification failed. Please retry.'
     setSelfError(message)
