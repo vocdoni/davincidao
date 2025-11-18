@@ -561,37 +561,53 @@ function App() {
           <div className="space-y-6 sm:space-y-8 px-4 sm:px-6">
 
             {/* Stats & Sign Button */}
-            <div id="sign-card" className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#3a4a3a]/40 border-[#4a5a4a]/60' : 'bg-[#a8c4a8] border-[#98b498]'}`}>
-              <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#b8d4b8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
+            <div id="sign-card" className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#3a3530]/40 border-[#4a4035]/60' : 'bg-[#e8dcc8] border-[#d4c4ac]'}`}>
+              <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#d8d8d8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
                 🪶 Sign the Manifesto
               </h3>
 
-              <p className={`text-center mb-5 sm:mb-6 text-xs sm:text-sm font-normal px-2 ${darkMode ? 'text-[#c4d4c4]' : 'text-gray-800'}`} style={{ lineHeight: '1.5em' }}>
+              <p className={`text-center mb-5 sm:mb-6 text-xs sm:text-sm font-normal px-2 ${darkMode ? 'text-[#c8c8c8]' : 'text-gray-800'}`} style={{ lineHeight: '1.5em' }}>
                 If you agree with these principles and refuse to be a spectator, add your signature and join us!
               </p>
 
               <div className="text-center mb-5 sm:mb-6">
-                <p className={`text-3xl sm:text-4xl md:text-5xl font-medium mb-2 ${darkMode ? 'text-[#d4e8d4]' : 'text-gray-900'}`} style={{ lineHeight: '1em' }}>
+                <p className={`text-3xl sm:text-4xl md:text-5xl font-medium mb-2 ${darkMode ? 'text-[#e8e8e8]' : 'text-gray-900'}`} style={{ lineHeight: '1em' }}>
                   {totalPledges.toLocaleString()}
                 </p>
-                <p className={`text-xs font-normal ${darkMode ? 'text-[#a8bca8]' : 'text-gray-700'}`} style={{ lineHeight: '1.1em' }}>
+                <p className={`text-xs font-normal ${darkMode ? 'text-[#b8b8b8]' : 'text-gray-700'}`} style={{ lineHeight: '1.1em' }}>
                   {totalPledges === 1 ? 'signature' : 'signatures'}
                 </p>
               </div>
 
-              <SignatureButton
-                pledgeStatus={pledgeStatus}
-                onSign={handleSign}
-                loading={pledging}
-                connected={!!account}
-              />
+              <div className="space-y-3">
+                <SignatureButton
+                  pledgeStatus={pledgeStatus}
+                  onSign={handleSign}
+                  loading={pledging}
+                  connected={!!account}
+                />
+
+                <div className="flex justify-center">
+                  <a
+                    href="https://x.com/davinci_vote"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2 sm:py-2.5 rounded-full font-medium text-xs sm:text-sm transition-all hover:scale-105 active:scale-95 bg-[#1da1f2] hover:bg-[#1a8cd8] text-white shadow-md hover:shadow-lg whitespace-nowrap"
+                  >
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                    <span>Follow us!</span>
+                  </a>
+                </div>
+              </div>
             </div>
 
             {/* Address Checker */}
             <AddressChecker onCheck={handleCheckAddress} onResolveENS={handleResolveENS} darkMode={darkMode} />
 
             {/* Census Info */}
-            <div className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#2a3540]/40 border-[#3a4550]/60' : 'bg-[#d5dce5] border-[#c4ccd8]'}`}>
+            <div className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#252a30]/40 border-[#353a40]/60' : 'bg-[#d0d8e0] border-[#bfc8d0]'}`}>
               <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#c8d8e8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
                 🌳 Cryptographic Census
               </h3>

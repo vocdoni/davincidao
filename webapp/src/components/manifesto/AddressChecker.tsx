@@ -99,19 +99,19 @@ export function AddressChecker({ onCheck, onResolveENS, darkMode = false }: Addr
   }
 
   return (
-    <div className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#3a3025]/40 border-[#4a4035]/60' : 'bg-[#e5c9b3] border-[#d4b89f]'}`}>
-      <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#e8d4b8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
+    <div className={`rounded-lg sm:rounded-xl border p-5 sm:p-6 ${darkMode ? 'bg-[#2a2520]/40 border-[#3a3530]/60' : 'bg-[#c8bfb0] border-[#b8a896]'}`}>
+      <h3 className={`text-lg sm:text-xl font-medium mb-3 text-center ${darkMode ? 'text-[#d8d8d8]' : 'text-gray-900'}`} style={{ lineHeight: '1.1em' }}>
         🔍 Check Address Status
       </h3>
 
-      <p className={`text-center mb-5 sm:mb-6 text-xs sm:text-sm font-normal px-2 ${darkMode ? 'text-[#d8c4a8]' : 'text-gray-800'}`} style={{ lineHeight: '1.5em' }}>
+      <p className={`text-center mb-5 sm:mb-6 text-xs sm:text-sm font-normal px-2 ${darkMode ? 'text-[#c8c8c8]' : 'text-gray-800'}`} style={{ lineHeight: '1.5em' }}>
         Verify if an address or ENS name has signed the manifesto.
       </p>
 
       <div className="space-y-3 sm:space-y-4">
         {/* Input */}
         <div>
-          <label htmlFor="address" className={`block text-xs font-medium mb-2 ${darkMode ? 'text-[#c4a57b]' : 'text-gray-700'}`}>
+          <label htmlFor="address" className={`block text-xs font-medium mb-2 ${darkMode ? 'text-[#b8b8b8]' : 'text-gray-700'}`}>
             Ethereum Address or ENS Name
           </label>
           <input
@@ -120,36 +120,38 @@ export function AddressChecker({ onCheck, onResolveENS, darkMode = false }: Addr
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="0x... or vitalik.eth"
-            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-xs ${darkMode ? 'bg-[#2a2520]/60 border-[#4a4035] text-[#e8d4b8] placeholder-[#8b7355]' : 'bg-white/60 border-[#d4b89f] text-gray-900'}`}
+            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono text-xs ${darkMode ? 'bg-[#2a2a2a]/60 border-[#4a4a4a] text-[#e8e8e8] placeholder-[#888888]' : 'bg-white/60 border-[#c4bfb4] text-gray-900'}`}
             onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
           />
         </div>
 
         {/* Check Button */}
-        <button
-          onClick={handleCheck}
-          disabled={checking || !input}
-          className="w-full px-6 py-2.5 sm:py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm"
-        >
-          {checking ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Checking...
-            </span>
-          ) : (
-            'Check Address'
-          )}
-        </button>
+        <div className="flex justify-center">
+          <button
+            onClick={handleCheck}
+            disabled={checking || !input}
+            className="inline-flex items-center justify-center px-5 py-2 sm:py-2.5 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 font-medium text-xs sm:text-sm whitespace-nowrap shadow-md hover:shadow-lg"
+          >
+            {checking ? (
+              <>
+                <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Checking...
+              </>
+            ) : (
+              'Check Address'
+            )}
+          </button>
+        </div>
 
         {/* Result */}
         {result && (
           <div className={`p-3 sm:p-4 rounded-lg border ${
             result.hasPledged
-              ? darkMode ? 'bg-[#2a2520]/60 border-green-600/50' : 'bg-white/50 border-green-700/40'
-              : darkMode ? 'bg-[#2a2520]/60 border-[#4a4035]' : 'bg-white/40 border-[#d4b89f]'
+              ? darkMode ? 'bg-[#2a2a2a]/60 border-green-600/50' : 'bg-white/50 border-green-700/40'
+              : darkMode ? 'bg-[#2a2a2a]/60 border-[#4a4a4a]' : 'bg-white/40 border-[#c4bfb4]'
           }`}>
             <div className="flex items-start gap-2 sm:gap-3">
               {result.hasPledged ? (
