@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ICensusValidator} from "../ICensusValidator.sol";
+import {ICensus} from "../ICensus.sol";
 
 /// @title VotingExample
-/// @notice Example contract demonstrating ICensusValidator interface usage
+/// @notice Example contract demonstrating ICensus interface usage
 /// @dev This is a reference implementation showing how external contracts can
 ///      integrate with the DavinciDAO census contract for on-chain validation
 contract VotingExample {
-    ICensusValidator public immutable census;
+    ICensus public immutable census;
 
     struct Proposal {
-        uint256 censusRoot;       // Snapshot of voting power at creation
-        uint256 createdAtBlock;   // Block when proposal was created
-        uint256 endBlock;         // Block when voting ends
-        bool executed;            // Whether proposal has been executed
+        uint256 censusRoot; // Snapshot of voting power at creation
+        uint256 createdAtBlock; // Block when proposal was created
+        uint256 endBlock; // Block when voting ends
+        bool executed; // Whether proposal has been executed
     }
 
     mapping(uint256 => Proposal) public proposals;
@@ -33,7 +33,7 @@ contract VotingExample {
     error VotingEnded();
 
     constructor(address _censusContract) {
-        census = ICensusValidator(_censusContract);
+        census = ICensus(_censusContract);
     }
 
     /// @notice Create a new proposal with a validated census root
@@ -41,16 +41,16 @@ contract VotingExample {
     /// @return proposalId The ID of the created proposal
     function createProposal(uint256 censusRoot) external returns (uint256 proposalId) {
         // Validate that the census root exists and is recent
-        uint256 rootBlock = census.getRootBlockNumber(censusRoot);
+        (bool ok, bytes32 data) = census.checkRoot(bytes32(censusRoot));
+        uint256 rootBlock = uint256(data);
 
-        if (rootBlock == 0) {
+        if (!ok) {
             revert InvalidCensusRoot();
         }
 
         if (block.number - rootBlock > MAX_ROOT_AGE) {
             revert CensusRootTooOld();
         }
-
         proposalId = proposalCount++;
 
         proposals[proposalId] = Proposal({
@@ -100,22 +100,5 @@ contract VotingExample {
         // Execute proposal logic here
 
         emit ProposalExecuted(proposalId);
-    }
-
-    /// @notice Get the current census root for creating new proposals
-    /// @dev Helper function to get the latest root from the census contract
-    /// @return root The current census root
-    /// @return rootBlock The block when this root was set
-    function getCurrentCensusRoot() external view returns (uint256 root, uint256 rootBlock) {
-        // This would typically be exposed by the census contract
-        // For this example, we just demonstrate the interface usage
-
-        // In practice, you'd call census.getCensusRoot() which is not part of
-        // the ICensusValidator interface but is available on DavinciDao
-
-        // Then validate it:
-        // rootBlock = census.getRootBlockNumber(root);
-
-        return (0, 0); // Placeholder
     }
 }

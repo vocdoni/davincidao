@@ -203,17 +203,28 @@ See [`go-tool/README.md`](go-tool/README.md) for usage.
 
 ## External Contract Integration
 
-The DavinciDAO contract implements the `ICensusValidator` interface, allowing external contracts (such as voting systems, governance contracts, or token-gated applications) to validate census roots on-chain.
+The DavinciDAO contract implements the `ICensus` interface, allowing external contracts (such as voting systems, governance contracts, or token-gated applications) to validate census roots on-chain.
 
-### ICensusValidator Interface
+### ICensus Interface
 
 ```solidity
-interface ICensusValidator {
-    /// @notice Validates a census root and returns the block number when it was set
-    /// @param root The census Merkle root to validate
-    /// @return blockNumber The block number when this root was set (0 if invalid/evicted)
-    function getRootBlockNumber(uint256 root) external view returns (uint256 blockNumber);
+interface ICensus {
+    /**
+     * @notice Gets a census root.
+     * @return root The census root.
+     */
+    function getRoot() external view returns (bytes32 root);
+
+    /**
+     * @notice Validates a given census root and returns any random data that fits in 32 bytes.
+     * @dev Example: Returns 0x0...0 if the root has never been set or has been evicted from history.
+     * @param root The census merkle tree root to validate.
+     * @return ok Indicates if the given root was considered valid or not.
+     * @return data Optional return data from the external call.
+     */
+    function checkRoot(bytes32 root) external view returns (bool ok, bytes32 data);
 }
+
 ```
 
 ### Usage in External Contracts
@@ -222,22 +233,37 @@ interface ICensusValidator {
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./ICensusValidator.sol";
+import "./ICensus.sol";
 
 contract VotingContract {
-    ICensusValidator public census;
+    ICensus public census;
 
     constructor(address _censusContract) {
-        census = ICensusValidator(_censusContract);
+        census = ICensus(_censusContract);
     }
+   
+    function createProposal(uint256 censusRoot) external returns (uint256 proposalId) {
+        // Validate that the census root exists and is recent
+        (bool ok, bytes32 data) = census.checkRoot(bytes32(censusRoot));
+        uint256 rootBlock = uint256(data);
 
-    function createProposal(uint256 censusRoot) external {
-        // Validate that the census root is valid and recent
-        uint256 rootBlock = census.getRootBlockNumber(censusRoot);
-        require(rootBlock > 0, "Invalid census root");
-        require(block.number - rootBlock < 100, "Census root too old");
+        if (!ok) {
+            revert InvalidCensusRoot();
+        }
 
-        // Create proposal with validated census...
+        if (block.number - rootBlock > MAX_ROOT_AGE) {
+            revert CensusRootTooOld();
+        }
+        proposalId = proposalCount++;
+
+        proposals[proposalId] = Proposal({
+            censusRoot: censusRoot,
+            createdAtBlock: block.number,
+            endBlock: block.number + VOTING_PERIOD,
+            executed: false
+        });
+
+        emit ProposalCreated(proposalId, censusRoot);
     }
 }
 ```
@@ -255,7 +281,7 @@ See [`src/examples/VotingExample.sol`](src/examples/VotingExample.sol) for a com
 - Validate census roots before using them
 - Create proposals with census snapshots
 - Check root age to ensure recent data
-- Integrate with the ICensusValidator interface
+- Integrate with the ICensus interface
 
 ## API Reference
 
@@ -278,11 +304,11 @@ See [`src/examples/VotingExample.sol`](src/examples/VotingExample.sol) for a com
 
 ### View Functions
 
-**`getCensusRoot() → uint256`**
+**`getRoot() → bytes32`**
 - Returns current Merkle root of the census tree
 
-**`getRootBlockNumber(uint256 root) → uint256`**
-- Returns block number when a specific root was set (0 if never set or evicted from buffer)
+**`checkRoot(uint256 root) → bool, bytes32`**
+- Returns some data when a specific root was set (0x0...0 if never set or evicted from buffer)
 
 **`computeLeafWithWeight(address account, uint88 weight) → uint256`**
 - Pure helper function to compute packed leaf value for an account

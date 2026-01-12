@@ -116,6 +116,11 @@ build: ## Build smart contracts
 	@forge build
 	@echo -e "$(GREEN)✓ Build complete$(NC)"
 
+go-bindings: ## Generate bindings
+	@echo -e "$(BLUE)Generating contract bindings...$(NC)"
+	@./go-tool/scripts/generate-bindings.sh
+	@echo -e "$(GREEN)✓ Bindings generated$(NC)"
+
 fmt: ## Format Solidity code
 	@forge fmt
 

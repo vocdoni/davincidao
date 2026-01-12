@@ -69,8 +69,8 @@ contract DeployDavinciDao is Script {
         }
 
         // Check initial state
-        uint256 currentRoot = census.getCensusRoot();
-        console2.log("\n  Initial census root: %d", currentRoot);
+        bytes32 currentRoot = census.getRoot();
+        console2.logBytes32(currentRoot);
         console2.log("  (Root auto-updates with on-chain Merkle tree construction)");
 
         vm.stopBroadcast();

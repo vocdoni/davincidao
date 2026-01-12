@@ -24,13 +24,13 @@ contract ContractVerificationTest is Test {
 
     function testDeployedContractBasicFunctions() public view {
         // Test basic contract functions
-        uint256 root = census.getCensusRoot();
-        console.log("Census root:", root);
-        assertTrue(true, "getCensusRoot() works");
+        bytes32 root = census.getRoot();
+        console.logBytes32(root);
+        assertTrue(true, "getRoot() works");
 
         // Test collections access
         address tokenAddress = census.collections(0);
-        console.log("Collection 0 token:", tokenAddress);
+        console.logAddress(tokenAddress);
         assertTrue(tokenAddress != address(0), "Collection should have valid token address");
         assertEq(tokenAddress, address(nft721), "Should be the deployed NFT contract");
     }
@@ -44,6 +44,6 @@ contract ContractVerificationTest is Test {
         // Verify ownership
         assertEq(nft721.ownerOf(tokenId), testUser, "Token should be owned by test user");
         assertEq(tokenId, 1, "First minted token should have ID 1");
-        console.log("Token ID", tokenId, "is properly configured and owned");
+        console.logUint(tokenId);
     }
 }

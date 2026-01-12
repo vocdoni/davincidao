@@ -10,7 +10,7 @@ import {InternalLeanIMT, LeanIMTData} from "zk-kit.solidity/packages/lean-imt/co
 import {SNARK_SCALAR_FIELD} from "zk-kit.solidity/packages/lean-imt/contracts/Constants.sol";
 
 // Census validator interface
-import {ICensusValidator} from "./ICensusValidator.sol";
+import {ICensus} from "./ICensus.sol";
 
 /// @title DavinciDAO Census Contract
 /// @notice Maintains an on-chain Merkle tree for NFT-based voting power delegation.
@@ -19,22 +19,22 @@ import {ICensusValidator} from "./ICensusValidator.sol";
 ///      - Circular buffer root history (gas-optimized, last N roots)
 ///      - Event emission for The Graph indexing
 ///      - Proof-based delegation for security and gas efficiency
-/// @dev Implements ICensusValidator for external contract integration
-contract DavinciDao is ICensusValidator {
+/// @dev Implements ICensus for external contract integration
+contract DavinciDao is ICensus {
     using InternalLeanIMT for LeanIMTData;
     using CircularBuffer for CircularBuffer.Bytes32CircularBuffer;
 
     // ========= Types & storage =========
 
     struct Collection {
-        address token;        // ERC-721 contract address
+        address token; // ERC-721 contract address
     }
 
     /// @notice Proof for a specific account's leaf (required by _update/_remove).
     /// @dev Includes current weight to enable stateless verification via Merkle proofs
     struct ProofInput {
         address account;
-        uint88 currentWeight;  // Current weight of this account (verified by proof)
+        uint88 currentWeight; // Current weight of this account (verified by proof)
         uint256[] siblings;
     }
 
@@ -91,16 +91,21 @@ contract DavinciDao is ICensusValidator {
     // ========= Public / view API =========
 
     /// @notice Current census Merkle root (Lean-IMT).
-    function getCensusRoot() external view returns (uint256) {
-        return _census._root();
+    function getRoot() external view returns (bytes32) {
+        return bytes32(_census._root());
     }
 
     /// @notice Check if a root has been valid at some point and get its block number.
     /// @dev Only returns block numbers for roots in the circular buffer (last 100 roots).
     /// @param root The census root to verify.
-    /// @return blockNumber The block number when this root was set (0 if never set or evicted).
-    function getRootBlockNumber(uint256 root) external view returns (uint256) {
-        return uint256(_rootToBlock[bytes32(root)]);
+    /// @return ok Indicates if the given root was considered valid or not.
+    /// @return data Optional return data from the external call.
+    function checkRoot(bytes32 root) external view override returns (bool ok, bytes32 data) {
+        bytes32 blockNumber = bytes32(uint256(_rootToBlock[root]));
+        if (blockNumber == 0) {
+            return (false, bytes32(0));
+        }
+        return (true, blockNumber);
     }
 
     /// @notice Compute the packed (address||weight) leaf for an account with given weight.
@@ -135,18 +140,18 @@ contract DavinciDao is ICensusValidator {
         out = new uint256[](len);
         uint256 k;
 
-        for (uint256 i; i < len; ) {
+        for (uint256 i; i < len;) {
             uint256 id = candidateIds[i];
-            if (tokenDelegate[_tokenKey(nftIndex, id)] != address(0)
-                && IERC721(token).ownerOf(id) == msg.sender) {
+            if (tokenDelegate[_tokenKey(nftIndex, id)] != address(0) && IERC721(token).ownerOf(id) == msg.sender) {
                 out[k++] = id;
             }
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
         // shrink memory array length in-place
         assembly { mstore(out, k) }
     }
-
 
     /// @notice Removed getAccountAt - use subgraph or events for tree reconstruction
     /// Gas optimization: removed indexAccount mapping
@@ -462,12 +467,7 @@ contract DavinciDao is ICensusValidator {
     /// @param owner Expected owner address
     /// @param tokenId Token ID to verify
     /// @param cacheKey Pre-computed cache key for this token
-    function _ownsWithCache(
-        address token,
-        address owner,
-        uint256 tokenId,
-        bytes32 cacheKey
-    ) internal returns (bool) {
+    function _ownsWithCache(address token, address owner, uint256 tokenId, bytes32 cacheKey) internal returns (bool) {
         address cachedOwner;
 
         assembly {
@@ -495,14 +495,10 @@ contract DavinciDao is ICensusValidator {
     /// @param nftIndex Collection index
     /// @param expectedOwner Expected owner of all tokens
     /// @param ids Token IDs to verify
-    function _verifyOwnershipBatch(
-        uint256 nftIndex,
-        address expectedOwner,
-        uint256[] calldata ids
-    ) internal {
+    function _verifyOwnershipBatch(uint256 nftIndex, address expectedOwner, uint256[] calldata ids) internal {
         address token = collections[nftIndex].token; // Cache storage → stack (SLOAD → stack)
 
-        for (uint256 i; i < ids.length; ) {
+        for (uint256 i; i < ids.length;) {
             uint256 id = ids[i];
             bytes32 cacheKey = keccak256(abi.encodePacked(nftIndex, id));
 
@@ -510,7 +506,9 @@ contract DavinciDao is ICensusValidator {
                 revert NotTokenOwner(id);
             }
 
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -568,5 +566,4 @@ contract DavinciDao is ICensusValidator {
             emit DelegatedBatch(msg.sender, to, nftIndex, delegatedIds);
         }
     }
-
 }
